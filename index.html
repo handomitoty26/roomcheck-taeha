@@ -1,0 +1,1158 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>기숙사 호실별 상벌점 체크아웃</title>
+    <!-- PWA 설정 -->
+    <link rel="manifest" href="manifest.json">
+    <meta name="theme-color" content="#2563eb">
+    <meta name="apple-mobile-web-app-capable" content="yes">
+    <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+    <meta name="apple-mobile-web-app-title" content="태하관퇴실체크아웃v1">
+    <link rel="apple-touch-icon" href="icons/icon-192.png">
+    <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
+    <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
+<script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<style>
+  :root{
+    --bg:#eef2f7; --card:#ffffff; --ink:#1f2d3d; --sub:#64748b;
+    --line:#e2e8f0; --blue:#2563eb; --blue-d:#1d4ed8; --green:#16a34a;
+    --red:#dc2626; --amber:#d97706; --purple:#7c3aed; --slate:#475569;
+    --g1:#ef4444; --g2:#2563eb; --g3:#059669; /* 학년 색 */
+  }
+  *{box-sizing:border-box;-webkit-tap-highlight-color:transparent;}
+  body{margin:0;font-family:'Pretendard','Apple SD Gothic Neo','Malgun Gothic',sans-serif;
+    background:var(--bg);color:var(--ink);font-size:15px;line-height:1.4;}
+  .wrap{max-width:1100px;margin:0 auto;padding:10px 10px 0;min-height:100vh;display:flex;flex-direction:column;}
+  /* 헤더 */
+  header{background:linear-gradient(135deg,#1e3a8a,#2563eb);color:#fff;border-radius:14px;
+    padding:9px 14px;box-shadow:0 4px 14px rgba(30,58,138,.25);}
+  .h-top{display:flex;align-items:center;gap:8px;flex-wrap:wrap;}
+  #prog-title{font-size:17px;font-weight:800;letter-spacing:-.5px;cursor:pointer;flex:1;min-width:150px;}
+  #prog-title::after{content:" ✎";font-size:12px;opacity:.6;}
+  .date-box{display:flex;align-items:center;gap:5px;background:rgba(255,255,255,.15);
+    padding:4px 6px;border-radius:9px;}
+  .date-box input{border:none;background:#fff;border-radius:6px;padding:4px 6px;font-size:13px;color:var(--ink);font-weight:700;}
+  .mini{background:rgba(255,255,255,.22);color:#fff;border:none;border-radius:7px;padding:5px 9px;
+    font-size:12px;font-weight:800;cursor:pointer;}
+  .mini:active{transform:scale(.96);}
+  .fs{background:rgba(255,255,255,.16);}
+  /* 탭 (슬림) */
+  .tabs{display:flex;gap:6px;margin-top:8px;}
+  .tab{flex:1;background:rgba(255,255,255,.18);color:#fff;border:none;border-radius:9px 9px 0 0;
+    padding:7px 8px;font-size:13.5px;font-weight:800;cursor:pointer;position:relative;transition:.15s;}
+  .tab.active{background:var(--bg);color:var(--blue-d);box-shadow:0 -2px 8px rgba(0,0,0,.08);}
+  .tab .edit{position:absolute;top:2px;right:5px;font-size:9px;opacity:.55;}
+  /* 툴바 */
+  .toolbar{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 6px;}
+  .tool{flex:1 1 auto;min-width:96px;border:none;border-radius:9px;padding:9px 6px;font-size:13px;
+    font-weight:700;cursor:pointer;color:#fff;display:flex;align-items:center;justify-content:center;gap:4px;}
+  .t-home{background:var(--slate);} .t-merit{background:var(--green);} .t-sum{background:var(--blue);}
+  .t-set{background:#0891b2;}
+  /* 연동 상태 바 */
+  .link-bar{border-radius:9px;padding:8px 12px;font-size:12.5px;font-weight:700;margin-bottom:8px;cursor:pointer;
+    display:flex;align-items:center;gap:6px;border:1px solid transparent;}
+  .link-bar.on{background:#ecfdf5;color:#047857;border-color:#a7f3d0;}
+  .link-bar.off{background:#fff7ed;color:#b45309;border-color:#fed7aa;}
+  /* 통계 줄 */
+  .stat{display:flex;gap:8px;flex-wrap:wrap;font-size:12.5px;color:var(--sub);margin-bottom:8px;padding:0 2px;}
+  .stat b{color:var(--ink);}
+  /* 호실 그리드 */
+  .floor{flex:1;min-height:0;}
+  .grid{display:grid;grid-template-columns:repeat(var(--cols, auto-fill),minmax(150px,1fr));gap:10px;}
+
+  /* ===== 전체화면 한 화면 맞춤 모드 ===== */
+  body.fit{overflow:hidden;}
+  body.fit .wrap{height:100vh;height:100dvh;padding:6px 8px 0;overflow:hidden;}
+  body.fit header{padding:6px 12px;border-radius:10px;}
+  body.fit #prog-title{font-size:15px;}
+  body.fit .tabs{margin-top:6px;}
+  body.fit .tab{padding:5px 6px;font-size:12.5px;}
+  body.fit .toolbar{margin:6px 0 4px;}
+  body.fit .tool{padding:6px 5px;font-size:12px;min-width:80px;}
+  body.fit .link-bar{padding:5px 10px;font-size:11px;margin-bottom:5px;}
+  body.fit .stat{font-size:11px;margin-bottom:5px;}
+  body.fit .floor{flex:1 1 auto;min-height:0;overflow:hidden;}
+  body.fit .grid{height:100%;grid-template-columns:repeat(var(--cols,5),1fr);grid-auto-rows:1fr;gap:5px;overflow:hidden;}
+  body.fit .room{box-shadow:none;border-radius:9px;min-height:0;display:flex;flex-direction:column;}
+  body.fit .room-head{padding:4px 8px;flex:0 0 auto;}
+  body.fit .room-no{font-size:var(--rno,15px);}
+  body.fit .room-no .gear{display:none;}
+  body.fit .bd{font-size:9px;padding:1px 4px;}
+  body.fit .students{padding:4px;gap:var(--stugap,4px);overflow:hidden;flex:1 1 auto;min-height:0;justify-content:stretch;}
+  body.fit .stu{padding:2px 8px;gap:6px;border-radius:7px;flex:1 1 0;min-height:0;}
+  body.fit .stu .gdot{width:9px;height:9px;}
+  body.fit .stu .hk{font-size:calc(var(--nm,16px) - 4px);}
+  body.fit .stu .nm{font-size:var(--nm,16px);}
+  body.fit .stu .mk{font-size:calc(var(--nm,16px) - 5px);}
+  body.fit .stu .ex-tag{font-size:calc(var(--nm,16px) - 5px);padding:0 5px;}
+  body.fit .memo{padding:5px 10px;margin:5px 0;border-radius:9px;flex:0 0 auto;}
+  body.fit .memo h4{font-size:11px;margin:0 0 3px;}
+  body.fit .memo textarea{height:34px;padding:5px 8px;font-size:12px;line-height:1.3;}
+  .room{background:var(--card);border-radius:12px;border:1px solid var(--line);
+    box-shadow:0 1px 4px rgba(0,0,0,.05);overflow:hidden;}
+  .room.flagged{border-color:#fca5a5;box-shadow:0 0 0 2px #fee2e2;}
+  .room.merit{border-color:#86efac;}
+  .room-head{padding:8px 10px;background:#f1f5f9;cursor:pointer;display:flex;align-items:center;
+    justify-content:space-between;gap:4px;border-bottom:1px solid var(--line);}
+  .room-no{font-size:16px;font-weight:800;color:var(--ink);}
+  .room-no .gear{font-size:10px;color:#94a3b8;}
+  .badges{display:flex;gap:3px;flex-wrap:wrap;justify-content:flex-end;}
+  .bd{font-size:10px;font-weight:800;padding:2px 5px;border-radius:6px;color:#fff;white-space:nowrap;}
+  .bd-room{background:var(--red);} .bd-merit{background:var(--green);}
+  .students{padding:7px;display:flex;flex-direction:column;gap:5px;}
+  .stu{display:flex;align-items:center;gap:6px;padding:6px 8px;border-radius:8px;background:#f8fafc;
+    border:1px solid #eef2f7;cursor:pointer;transition:.1s;position:relative;}
+  .stu:active{transform:scale(.98);}
+  .stu.has{background:#fff1f2;border-color:#fecdd3;}
+  .stu .gdot{width:8px;height:8px;border-radius:50%;flex:0 0 auto;}
+  .stu .hk{font-size:11px;font-weight:700;color:#94a3b8;flex:0 0 auto;font-variant-numeric:tabular-nums;}
+  .g1{background:var(--g1);} .g2{background:var(--g2);} .g3{background:var(--g3);}
+  .stu .nm{font-size:14px;font-weight:700;flex:1;}
+  .stu .mk{font-size:10px;font-weight:800;color:var(--red);}
+  .stu.excluded{background:#e2e8f0;color:#94a3b8;cursor:not-allowed;border-style:dashed;}
+  .stu.excluded .gdot{opacity:.3;}
+  .stu.excluded .nm{text-decoration:line-through;font-weight:600;}
+  .stu .ex-tag{font-size:10px;font-weight:800;padding:1px 5px;border-radius:5px;color:#fff;}
+  .ex-귀가{background:#0ea5e9;} .ex-퇴사{background:#64748b;} .ex-미입사{background:#a855f7;}
+  /* 메모 */
+  .memo{flex:0 0 auto;background:var(--card);border-radius:12px;padding:10px 14px;margin:10px 0;
+    border:1px solid var(--line);box-shadow:0 1px 4px rgba(0,0,0,.05);}
+  .memo h4{margin:0 0 6px;font-size:13px;color:var(--slate);}
+  .memo textarea{width:100%;height:62px;border:1px solid var(--line);border-radius:8px;padding:9px;
+    font-size:14px;font-family:inherit;resize:none;background:#f8fafc;line-height:1.5;}
+  .memo textarea:focus{outline:none;border-color:var(--blue);background:#fff;}
+  /* 메모 입력 시 가상 키보드 위로 띄우기 */
+  body.memo-float .memo{position:fixed;left:8px;right:8px;bottom:var(--kb,0);z-index:60;margin:0;
+    box-shadow:0 -6px 24px rgba(0,0,0,.22);border-color:var(--blue);}
+  body.memo-float .memo textarea{height:84px;}
+  body.fit.memo-float .memo textarea{height:72px;font-size:14px;}
+  /* 모달 */
+  .ov{position:fixed;inset:0;background:rgba(15,23,42,.55);display:none;z-index:50;
+    align-items:center;justify-content:center;padding:14px;}
+  .ov.show{display:flex;}
+  .modal{background:#fff;border-radius:16px;width:100%;max-width:460px;max-height:88vh;overflow:auto;
+    box-shadow:0 20px 50px rgba(0,0,0,.3);}
+  .m-head{padding:14px 16px;border-bottom:1px solid var(--line);display:flex;align-items:center;
+    justify-content:space-between;position:sticky;top:0;background:#fff;z-index:2;}
+  .m-head h3{margin:0;font-size:17px;font-weight:800;}
+  .m-head .x{background:#f1f5f9;border:none;border-radius:8px;width:30px;height:30px;font-size:16px;cursor:pointer;color:var(--sub);}
+  .m-body{padding:14px 16px;}
+  .m-sub{font-size:12px;color:var(--sub);margin-bottom:10px;}
+  .opt{display:flex;align-items:center;gap:10px;padding:12px;border:2px solid var(--line);border-radius:10px;
+    margin-bottom:8px;cursor:pointer;font-size:15px;font-weight:700;transition:.12s;}
+  .opt.sel{border-color:var(--red);background:#fff1f2;color:var(--red);}
+  .opt.sel.good{border-color:var(--green);background:#f0fdf4;color:var(--green);}
+  .opt .ck{width:22px;height:22px;border:2px solid #cbd5e1;border-radius:6px;flex:0 0 auto;
+    display:flex;align-items:center;justify-content:center;font-size:13px;color:#fff;}
+  .opt.sel .ck{background:var(--red);border-color:var(--red);}
+  .opt.sel.good .ck{background:var(--green);border-color:var(--green);}
+  .opt .opt-label{flex:1;}
+  .merit-row{display:flex;gap:6px;margin-top:6px;}
+  .merit-row .mb{flex:1;padding:11px;border:2px solid var(--line);border-radius:10px;text-align:center;
+    font-weight:800;cursor:pointer;font-size:15px;}
+  .merit-row .mb.sel{border-color:var(--green);background:#f0fdf4;color:var(--green);}
+  .sec-t{font-size:13px;font-weight:800;color:var(--slate);margin:14px 0 8px;border-top:1px dashed var(--line);padding-top:12px;}
+  .m-foot{padding:12px 16px;border-top:1px solid var(--line);display:flex;gap:8px;position:sticky;bottom:0;background:#fff;}
+  .btn{flex:1;border:none;border-radius:10px;padding:12px;font-size:15px;font-weight:800;cursor:pointer;}
+  .btn-p{background:var(--blue);color:#fff;} .btn-g{background:#f1f5f9;color:var(--slate);}
+  .btn-r{background:#fee2e2;color:var(--red);}
+  textarea.paste{width:100%;height:120px;border:1px solid var(--line);border-radius:8px;padding:9px;font-size:13px;font-family:inherit;}
+  .tbl{width:100%;border-collapse:collapse;font-size:13px;}
+  .tbl th,.tbl td{padding:7px 6px;border-bottom:1px solid var(--line);text-align:center;}
+  .tbl th{background:#f1f5f9;font-weight:800;color:var(--slate);position:sticky;top:0;}
+  .tbl tr.top{background:#f0fdf4;font-weight:800;}
+  .field{margin-bottom:10px;}
+  .field label{display:block;font-size:12px;font-weight:700;color:var(--slate);margin-bottom:4px;}
+  .field input,.field select{width:100%;padding:9px;border:1px solid var(--line);border-radius:8px;font-size:14px;font-family:inherit;}
+  .floor-cks{display:flex;gap:8px;flex-wrap:wrap;}
+  .floor-cks label{display:flex;align-items:center;gap:5px;background:#f8fafc;border:1px solid var(--line);
+    border-radius:8px;padding:8px 12px;font-size:14px;font-weight:700;cursor:pointer;}
+  .floor-cks input{width:auto;}
+  .sum-pre{white-space:pre-wrap;font-size:13px;line-height:1.6;background:#f8fafc;border:1px solid var(--line);
+    border-radius:10px;padding:12px;max-height:46vh;overflow:auto;}
+  .ex-item{display:flex;align-items:center;gap:8px;padding:7px 8px;border:1px solid var(--line);border-radius:8px;margin-bottom:6px;}
+  .ex-item .enm{flex:1;font-weight:700;font-size:14px;}
+  .ex-item select{padding:6px;border:1px solid var(--line);border-radius:7px;font-size:13px;}
+  .toast{position:fixed;left:50%;bottom:24px;transform:translateX(-50%);background:#1f2d3d;color:#fff;
+    padding:11px 18px;border-radius:30px;font-size:14px;font-weight:700;z-index:99;opacity:0;transition:.3s;pointer-events:none;}
+  .toast.show{opacity:.95;}
+  .hint{font-size:11.5px;color:var(--sub);background:#f8fafc;border:1px dashed var(--line);border-radius:8px;padding:8px;margin-top:8px;line-height:1.5;}
+  /* 달력 */
+  .cal-nav{display:flex;align-items:center;justify-content:space-between;margin-bottom:8px;font-size:16px;}
+  .cal-arrow{background:#f1f5f9;border:none;border-radius:8px;width:36px;height:32px;font-size:18px;font-weight:800;color:var(--slate);cursor:pointer;}
+  .cal-grid{display:grid;grid-template-columns:repeat(7,1fr);gap:4px;}
+  .cal-w{text-align:center;font-size:11px;font-weight:800;color:var(--sub);padding:2px 0;}
+  .cal-w.sun{color:#dc2626;}
+  .cal-d{position:relative;aspect-ratio:1/1;border:1px solid var(--line);border-radius:8px;background:#fff;
+    font-size:14px;font-weight:700;color:var(--ink);cursor:pointer;display:flex;align-items:center;justify-content:center;}
+  .cal-d:active{transform:scale(.95);}
+  .cal-d.has{border-color:#93c5fd;color:var(--blue-d);}
+  .cal-d.has::after{content:"";position:absolute;bottom:4px;left:50%;transform:translateX(-50%);
+    width:5px;height:5px;border-radius:50%;background:var(--blue);}
+  .cal-d.today{box-shadow:inset 0 0 0 2px #fbbf24;}
+  .cal-d.cur{background:var(--blue);color:#fff;border-color:var(--blue);}
+  .cal-d.cur.has::after{background:#fff;}
+</style>
+
+    <script>
+      if ('serviceWorker' in navigator) {
+        window.addEventListener('load', function() {
+          navigator.serviceWorker.register('sw.js')
+            .then(function(reg) { console.log('SW registered'); })
+            .catch(function(err) { console.log('SW error', err); });
+        });
+      }
+    </script>
+</head>
+<body>
+<div class="wrap">
+  <header>
+    <div class="h-top">
+      <div id="prog-title" onclick="editProgTitle()">기숙사 호실별 상벌점 체크아웃</div>
+      <div class="date-box">
+        <input type="date" id="date-input" onchange="onDateChange()">
+        <button class="mini" onclick="goToday()">오늘</button>
+        <button class="mini" onclick="openCalendar(false)">🗓️</button>
+      </div>
+      <button class="mini fs" id="fs-btn" onclick="toggleFull()">⛶ 전체화면</button>
+    </div>
+    <div class="tabs" id="tabs"></div>
+  </header>
+
+  <div class="toolbar">
+    <button class="tool t-home" onclick="openExcl()">🚪 귀가·퇴사</button>
+    <button class="tool t-merit" onclick="openMerit()">🏅 상점 집계</button>
+    <button class="tool t-sum" onclick="openSummary()">📊 오늘 집계</button>
+    <button class="tool t-set" onclick="openData()">⚙️ 설정·데이터</button>
+    <input type="file" id="restore-file" accept=".json" style="display:none" onchange="doRestore(event)">
+  </div>
+
+  <div class="link-bar" id="link-bar" onclick="openLink()"></div>
+  <div class="stat" id="stat"></div>
+  <div class="floor"><div class="grid" id="grid"></div></div>
+
+  <div class="memo">
+    <h4>📝 당일 특이사항 메모 (자동 저장)</h4>
+    <textarea id="memo" placeholder="체크아웃 중 특이사항을 기록하세요. (선택한 날짜·자동 저장)"></textarea>
+  </div>
+</div>
+
+<!-- 개인 벌점 모달 -->
+<div class="ov" id="ov-stu">
+  <div class="modal">
+    <div class="m-head"><h3 id="stu-title"></h3><button class="x" onclick="closeOv('ov-stu')">✕</button></div>
+    <div class="m-body">
+      <div class="m-sub">개인 벌점 항목을 선택하세요.</div>
+      <div id="stu-opts"></div>
+    </div>
+    <div class="m-foot">
+      <button class="btn btn-r" onclick="clearStu()">초기화</button>
+      <button class="btn btn-p" onclick="saveStu()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 호실 전체 모달 -->
+<div class="ov" id="ov-room">
+  <div class="modal">
+    <div class="m-head"><h3 id="room-title"></h3><button class="x" onclick="closeOv('ov-room')">✕</button></div>
+    <div class="m-body">
+      <div class="m-sub">호실 전체 벌점(전 인원 공통)을 선택하세요.</div>
+      <div id="room-opts"></div>
+      <div class="sec-t">🏅 정리정돈 우수 등급 (상점용 누적 체크)</div>
+      <div class="merit-row" id="merit-opts"></div>
+    </div>
+    <div class="m-foot">
+      <button class="btn btn-r" onclick="clearRoom()">초기화</button>
+      <button class="btn btn-p" onclick="saveRoom()">저장</button>
+    </div>
+  </div>
+</div>
+
+<!-- 귀가/퇴사 관리 -->
+<div class="ov" id="ov-excl">
+  <div class="modal">
+    <div class="m-head"><h3>🚪 귀가·퇴사·미입사 관리</h3><button class="x" onclick="closeOv('ov-excl')">✕</button></div>
+    <div class="m-body">
+      <div class="m-sub">체크 제외 대상은 호실에서 음영 처리되고, 전체 벌점 입력 시에도 제외됩니다.</div>
+      <div class="field">
+        <label>① 명단 붙여넣기 자동 등록 (학번·이름·구분 포함 텍스트)</label>
+        <textarea class="paste" id="excl-paste" placeholder="예)
+2409 김성훈 귀가
+2219 정성우 명령퇴사
+김민재 미입사"></textarea>
+      </div>
+      <button class="btn btn-p" style="margin-bottom:6px" onclick="applyPaste()">붙여넣은 명단 자동 반영</button>
+      <div class="hint">‘귀가’·‘퇴사/명령퇴사’·‘미입사’ 키워드를 자동 인식합니다. 학번 또는 이름으로 매칭됩니다.</div>
+      <div class="sec-t">② 현재 제외 대상 (개별 수정/해제)</div>
+      <div class="field">
+        <input type="text" id="excl-search" placeholder="🔍 이름/학번으로 학생 검색해 추가" oninput="renderExclSearch()">
+      </div>
+      <div id="excl-search-list"></div>
+      <div id="excl-current"></div>
+    </div>
+    <div class="m-foot">
+      <button class="btn btn-r" onclick="clearAllExcl()">전체 해제</button>
+      <button class="btn btn-p" onclick="closeOv('ov-excl');render()">완료</button>
+    </div>
+  </div>
+</div>
+
+<!-- 상점 순위 집계 -->
+<div class="ov" id="ov-merit">
+  <div class="modal">
+    <div class="m-head"><h3>🏅 상점 순위 집계</h3><button class="x" onclick="closeOv('ov-merit')">✕</button></div>
+    <div class="m-body">
+      <div class="m-sub">기간 내 정리정돈 우수 등급(상 3 · 중 2 · 하 1점)을 합산해 순위를 매깁니다. 표시 없는 날은 0점으로 합산됩니다.</div>
+      <div style="display:flex;gap:8px;">
+        <div class="field" style="flex:1"><label>시작일</label><input type="date" id="merit-from"></div>
+        <div class="field" style="flex:1"><label>종료일</label><input type="date" id="merit-to"></div>
+        <div class="field" style="width:90px"><label>상위 N개</label><input type="number" id="merit-n" value="5" min="1"></div>
+      </div>
+      <div class="field">
+        <label>대상 층 (복수 선택 가능)</label>
+        <div class="floor-cks" id="merit-floors">
+          <label><input type="checkbox" value="2" checked>2층</label>
+          <label><input type="checkbox" value="3" checked>3층</label>
+          <label><input type="checkbox" value="4">4층</label>
+          <label><input type="checkbox" value="5">5층</label>
+        </div>
+      </div>
+      <div style="display:flex;gap:8px;margin-bottom:6px;">
+        <button class="btn btn-p" onclick="calcMerit()">집계</button>
+      </div>
+      <div id="merit-result"></div>
+      <div class="sec-t">📜 상점 부여 기록</div>
+      <div id="merit-log"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 오늘 집계 -->
+<div class="ov" id="ov-sum">
+  <div class="modal">
+    <div class="m-head"><h3>📊 오늘 체크아웃 집계</h3><button class="x" onclick="closeOv('ov-sum')">✕</button></div>
+    <div class="m-body"><div class="sum-pre" id="sum-text"></div></div>
+    <div class="m-foot">
+      <button class="btn btn-g" onclick="copySummary()">📋 복사</button>
+      <button class="btn btn-p" onclick="closeOv('ov-sum')">닫기</button>
+    </div>
+  </div>
+</div>
+
+<!-- 설정 · 데이터 (명단등록 / 백업·복원 / 탭설정 / 자동초기화) -->
+<div class="ov" id="ov-data">
+  <div class="modal">
+    <div class="m-head"><h3>⚙️ 설정 · 데이터</h3><button class="x" onclick="closeOv('ov-data')">✕</button></div>
+    <div class="m-body">
+
+      <div class="sec-t" style="border-top:none;margin-top:0;padding-top:0">📋 방배정 명단 등록</div>
+      <div class="m-sub">엑셀(.xlsx)을 등록하면 호실·학생 구성이 교체되며, 다시 등록하기 전까지 기억됩니다.</div>
+      <div id="roster-status"></div>
+      <div class="field" style="margin-top:8px">
+        <input type="file" id="roster-file" accept=".xlsx,.xls" onchange="parseRoster(event)">
+      </div>
+      <div id="roster-preview"></div>
+      <div style="display:flex;gap:8px;margin-top:6px">
+        <button class="btn btn-g" onclick="resetRoster()">기본 내장 명단</button>
+        <button class="btn btn-p" id="roster-apply" onclick="applyRoster()" disabled>명단 등록 적용</button>
+      </div>
+
+      <div class="sec-t">💾 백업 / 복원</div>
+      <div class="m-sub">모든 날짜의 상벌점·상점등급·메모가 <b>파일 1개</b>에 저장됩니다(날짜별 파일이 생기지 않음). 복원하면 달력에서 날짜를 골라 볼 수 있습니다.</div>
+      <div style="display:flex;gap:8px">
+        <button class="btn btn-p" onclick="doBackup()">💾 전체 백업(1개)</button>
+        <button class="btn btn-g" onclick="document.getElementById('restore-file').click()">📂 복원</button>
+      </div>
+      <button class="btn btn-g" style="margin-top:8px" onclick="closeOv('ov-data');openCalendar(false)">🗓️ 기록 달력 보기</button>
+
+      <div class="sec-t">🏢 담당 층 · 탭 설정</div>
+      <div class="m-sub">담당하는 2개 층을 고르고 탭 이름을 정하세요.</div>
+      <div id="set-fields"></div>
+      <button class="btn btn-p" style="margin-top:4px" onclick="saveTabSet()">탭 설정 저장</button>
+
+      <div class="sec-t">🔄 자동 초기화</div>
+      <div id="auto-info"></div>
+    </div>
+  </div>
+</div>
+
+<!-- 당일 일지 연동 -->
+<div class="ov" id="ov-link">
+  <div class="modal">
+    <div class="m-head"><h3>🔗 당일 일지 연동</h3><button class="x" onclick="closeOv('ov-link')">✕</button></div>
+    <div class="m-body">
+      <div class="m-sub">‘귀가외출교내활동’ 엑셀을 연동하면 <b id="link-date-lbl"></b>의 귀가·퇴사·미입사 학생이 자동으로 체크 대상에서 제외됩니다.</div>
+      <div id="link-status-box"></div>
+      <div class="field" style="margin-top:10px">
+        <label>① 귀가외출교내활동 엑셀 선택 (.xlsx)</label>
+        <input type="file" id="link-file" accept=".xlsx,.xls" onchange="parseLink(event)">
+      </div>
+      <div id="link-preview"></div>
+      <div class="hint">‘귀가’ 시트의 일일 귀가/명령퇴사 명단과 미입사/퇴사자 명단을 자동 인식해 현재 명단과 매칭합니다.<br>연동 후에도 ‘귀가·퇴사 관리’에서 개별 수정/추가가 가능합니다.</div>
+    </div>
+    <div class="m-foot">
+      <button class="btn btn-r" onclick="unlinkLog()">연동 해제</button>
+      <button class="btn btn-p" id="link-apply" onclick="applyLink()" disabled>연동 적용</button>
+    </div>
+  </div>
+</div>
+
+<!-- 기록 달력 -->
+<div class="ov" id="ov-cal">
+  <div class="modal" style="max-width:380px">
+    <div class="m-head"><h3>🗓️ 기록 달력</h3><button class="x" onclick="closeOv('ov-cal')">✕</button></div>
+    <div class="m-body">
+      <div class="m-sub">파란 점이 있는 날은 기록이 있는 날입니다. 날짜를 누르면 그 날 시트로 이동합니다.</div>
+      <div id="cal-body"></div>
+      <div style="display:flex;gap:8px;margin-top:10px">
+        <button class="btn btn-g" onclick="closeOv('ov-cal')">닫기</button>
+        <button class="btn btn-p" onclick="pickDate(todayStr())">오늘로</button>
+      </div>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+/* ===== 데이터 ===== */
+const DORM_DATA = {"students": [{"hak": "1105", "name": "김경준", "grade": 1, "room": "208"}, {"hak": "2106", "name": "강리원", "grade": 2, "room": "526"}, {"hak": "3105", "name": "노은찬", "grade": 3, "room": "501"}, {"hak": "1106", "name": "김민재", "grade": 1, "room": "209"}, {"hak": "2107", "name": "김이든", "grade": 2, "room": "527"}, {"hak": "3106", "name": "신동현", "grade": 3, "room": "503"}, {"hak": "1107", "name": "김율언", "grade": 1, "room": "210"}, {"hak": "2108", "name": "나현준", "grade": 2, "room": "408"}, {"hak": "3107", "name": "오명훈", "grade": 3, "room": "503"}, {"hak": "1108", "name": "김현준", "grade": 1, "room": "212"}, {"hak": "2109", "name": "남성우", "grade": 2, "room": "409"}, {"hak": "3108", "name": "오세현", "grade": 3, "room": "504"}, {"hak": "1109", "name": "나현석", "grade": 1, "room": "208"}, {"hak": "2110", "name": "문성원", "grade": 2, "room": "410"}, {"hak": "3109", "name": "이동현", "grade": 3, "room": "501"}, {"hak": "1110", "name": "안진우", "grade": 1, "room": "209"}, {"hak": "2111", "name": "박강민", "grade": 2, "room": "526"}, {"hak": "3110", "name": "이서진", "grade": 3, "room": "504"}, {"hak": "1111", "name": "양지훈", "grade": 1, "room": "210"}, {"hak": "2112", "name": "박세준", "grade": 2, "room": "527"}, {"hak": "3111", "name": "이승준", "grade": 3, "room": "502"}, {"hak": "1112", "name": "유재원", "grade": 1, "room": "212"}, {"hak": "2113", "name": "손지우", "grade": 2, "room": "408"}, {"hak": "3112", "name": "이원준", "grade": 3, "room": "503"}, {"hak": "1113", "name": "이석현", "grade": 1, "room": "208"}, {"hak": "2114", "name": "윤찬혁", "grade": 2, "room": "409"}, {"hak": "3113", "name": "이윤준", "grade": 3, "room": "501"}, {"hak": "1114", "name": "이준서A", "grade": 1, "room": "209"}, {"hak": "2115", "name": "이동하", "grade": 2, "room": "410"}, {"hak": "3114", "name": "정유찬A", "grade": 3, "room": "502"}, {"hak": "1115", "name": "이호진", "grade": 1, "room": "210"}, {"hak": "2116", "name": "이요셉", "grade": 2, "room": "526"}, {"hak": "3115", "name": "천승재", "grade": 3, "room": "504"}, {"hak": "1116", "name": "이효승", "grade": 1, "room": "212"}, {"hak": "2117", "name": "전동환", "grade": 2, "room": "527"}, {"hak": "3205", "name": "김동현", "grade": 3, "room": "505"}, {"hak": "1117", "name": "장하성", "grade": 1, "room": "208"}, {"hak": "2118", "name": "전상욱", "grade": 2, "room": "408"}, {"hak": "3206", "name": "김민준", "grade": 3, "room": "506"}, {"hak": "1118", "name": "정지환", "grade": 1, "room": "209"}, {"hak": "2119", "name": "정민규", "grade": 2, "room": "409"}, {"hak": "3207", "name": "김희재", "grade": 3, "room": "507"}, {"hak": "1119", "name": "정태민", "grade": 1, "room": "210"}, {"hak": "2120", "name": "조운호", "grade": 2, "room": "410"}, {"hak": "3208", "name": "박준우", "grade": 3, "room": "505"}, {"hak": "1120", "name": "조재희", "grade": 1, "room": "212"}, {"hak": "2207", "name": "고준형", "grade": 2, "room": "404"}, {"hak": "3209", "name": "오정우", "grade": 3, "room": "506"}, {"hak": "1205", "name": "강민서", "grade": 1, "room": "207"}, {"hak": "2208", "name": "권현준", "grade": 2, "room": "403"}, {"hak": "3210", "name": "이강현", "grade": 3, "room": "507"}, {"hak": "1206", "name": "구승호", "grade": 1, "room": "206"}, {"hak": "2209", "name": "김준우", "grade": 2, "room": "401"}, {"hak": "3211", "name": "이승후", "grade": 3, "room": "505"}, {"hak": "1207", "name": "김슬빈", "grade": 1, "room": "205"}, {"hak": "2210", "name": "문지성", "grade": 2, "room": "405"}, {"hak": "3212", "name": "이호진", "grade": 3, "room": "506"}, {"hak": "1208", "name": "김영민", "grade": 1, "room": "204"}, {"hak": "2211", "name": "박찬휘", "grade": 2, "room": "404"}, {"hak": "3213", "name": "임주하", "grade": 3, "room": "507"}, {"hak": "1209", "name": "김준성A", "grade": 1, "room": "203"}, {"hak": "2212", "name": "서윤", "grade": 2, "room": "403"}, {"hak": "3214", "name": "한서구", "grade": 3, "room": "505"}, {"hak": "1210", "name": "김태랑", "grade": 1, "room": "207"}, {"hak": "2214", "name": "오정혁", "grade": 2, "room": "405"}, {"hak": "3215", "name": "홍민율", "grade": 3, "room": "507"}, {"hak": "1211", "name": "박민상", "grade": 1, "room": "206"}, {"hak": "2215", "name": "이종원", "grade": 2, "room": "404"}, {"hak": "3305", "name": "김민율", "grade": 3, "room": "508"}, {"hak": "1212", "name": "박찬", "grade": 1, "room": "205"}, {"hak": "2216", "name": "이지우", "grade": 2, "room": "403"}, {"hak": "3306", "name": "김민재", "grade": 3, "room": "509"}, {"hak": "1213", "name": "변유안", "grade": 1, "room": "204"}, {"hak": "2217", "name": "전우진", "grade": 2, "room": "401"}, {"hak": "3307", "name": "김현응", "grade": 3, "room": "402"}, {"hak": "1214", "name": "신진우", "grade": 1, "room": "203"}, {"hak": "2218", "name": "정성규", "grade": 2, "room": "405"}, {"hak": "3308", "name": "박도영", "grade": 3, "room": "511"}, {"hak": "1215", "name": "양윤서", "grade": 1, "room": "207"}, {"hak": "2219", "name": "정성우", "grade": 2, "room": "402"}, {"hak": "3309", "name": "박지훈", "grade": 3, "room": "508"}, {"hak": "1216", "name": "엄주호", "grade": 1, "room": "206"}, {"hak": "2220", "name": "최준영A", "grade": 2, "room": "403"}, {"hak": "3310", "name": "양진현", "grade": 3, "room": "509"}, {"hak": "1217", "name": "이재우", "grade": 1, "room": "205"}, {"hak": "2306", "name": "강준혁", "grade": 2, "room": "411"}, {"hak": "3311", "name": "유현제", "grade": 3, "room": "510"}, {"hak": "1218", "name": "정준형", "grade": 1, "room": "204"}, {"hak": "2307", "name": "김동원", "grade": 2, "room": "412"}, {"hak": "3312", "name": "윤서진A", "grade": 3, "room": "511"}, {"hak": "1219", "name": "한진우", "grade": 1, "room": "203"}, {"hak": "2308", "name": "김민서", "grade": 2, "room": "406"}, {"hak": "3313", "name": "정승익", "grade": 3, "room": "508"}, {"hak": "1220", "name": "홍영현", "grade": 1, "room": "206"}, {"hak": "2309", "name": "김하랑", "grade": 2, "room": "407"}, {"hak": "3314", "name": "정우준", "grade": 3, "room": "509"}, {"hak": "1221", "name": "홍재윤", "grade": 1, "room": "204"}, {"hak": "2310", "name": "류동한", "grade": 2, "room": "411"}, {"hak": "3315", "name": "최민석", "grade": 3, "room": "510"}, {"hak": "1305", "name": "구민준", "grade": 1, "room": "201"}, {"hak": "2311", "name": "박재율", "grade": 2, "room": "412"}, {"hak": "3316", "name": "하상준", "grade": 3, "room": "511"}, {"hak": "1306", "name": "김강건", "grade": 1, "room": "202"}, {"hak": "2312", "name": "배선우", "grade": 2, "room": "406"}, {"hak": "3405", "name": "강서준", "grade": 3, "room": "512"}, {"hak": "1307", "name": "김범준", "grade": 1, "room": "213"}, {"hak": "2313", "name": "오서진", "grade": 2, "room": "407"}, {"hak": "3406", "name": "김우영", "grade": 3, "room": "514"}, {"hak": "1308", "name": "민경준", "grade": 1, "room": "216"}, {"hak": "2314", "name": "오시훈", "grade": 2, "room": "411"}, {"hak": "3407", "name": "김효민", "grade": 3, "room": "515"}, {"hak": "1309", "name": "박서준", "grade": 1, "room": "217"}, {"hak": "2315", "name": "유재민", "grade": 2, "room": "412"}, {"hak": "3408", "name": "박지후", "grade": 3, "room": "518"}, {"hak": "1310", "name": "박준후", "grade": 1, "room": "201"}, {"hak": "2316", "name": "이은총", "grade": 2, "room": "406"}, {"hak": "3409", "name": "송승훈", "grade": 3, "room": "512"}, {"hak": "1311", "name": "박찬희", "grade": 1, "room": "202"}, {"hak": "2317", "name": "한강희", "grade": 2, "room": "407"}, {"hak": "3410", "name": "오은택", "grade": 3, "room": "514"}, {"hak": "1312", "name": "서준수", "grade": 1, "room": "213"}, {"hak": "2318", "name": "한건희", "grade": 2, "room": "411"}, {"hak": "3411", "name": "이승윤", "grade": 3, "room": "515"}, {"hak": "1313", "name": "손승우", "grade": 1, "room": "216"}, {"hak": "2319", "name": "황정욱", "grade": 2, "room": "406"}, {"hak": "3412", "name": "이현준", "grade": 3, "room": "518"}, {"hak": "1314", "name": "신동민", "grade": 1, "room": "217"}, {"hak": "2320", "name": "황태완", "grade": 2, "room": "407"}, {"hak": "3413", "name": "임시환", "grade": 3, "room": "512"}, {"hak": "1315", "name": "이모현", "grade": 1, "room": "201"}, {"hak": "2406", "name": "김건", "grade": 2, "room": "414"}, {"hak": "3414", "name": "장동우", "grade": 3, "room": "514"}, {"hak": "1316", "name": "임서준", "grade": 1, "room": "202"}, {"hak": "2407", "name": "김도현", "grade": 2, "room": "304"}, {"hak": "3415", "name": "최세호", "grade": 3, "room": "515"}, {"hak": "1317", "name": "장원준", "grade": 1, "room": "213"}, {"hak": "2408", "name": "김선우", "grade": 2, "room": "306"}, {"hak": "3416", "name": "홍준혁", "grade": 3, "room": "518"}, {"hak": "1318", "name": "지동근", "grade": 1, "room": "216"}, {"hak": "2409", "name": "김성훈", "grade": 2, "room": "305"}, {"hak": "3505", "name": "김경훈", "grade": 3, "room": "519"}, {"hak": "1319", "name": "한정서", "grade": 1, "room": "217"}, {"hak": "2410", "name": "박지원", "grade": 2, "room": "304"}, {"hak": "3506", "name": "김서준", "grade": 3, "room": "520"}, {"hak": "1320", "name": "한태오", "grade": 1, "room": "201"}, {"hak": "2411", "name": "손준범", "grade": 2, "room": "414"}, {"hak": "3507", "name": "김시호", "grade": 3, "room": "521"}, {"hak": "1321", "name": "허윤", "grade": 1, "room": "216"}, {"hak": "2412", "name": "이도겸", "grade": 2, "room": "305"}, {"hak": "3508", "name": "명진우", "grade": 3, "room": "522"}, {"hak": "1407", "name": "김선우", "grade": 1, "room": "218"}, {"hak": "2413", "name": "이민서", "grade": 2, "room": "304"}, {"hak": "3509", "name": "박태준", "grade": 3, "room": "519"}, {"hak": "1408", "name": "김윤성", "grade": 1, "room": "219"}, {"hak": "2414", "name": "이태웅", "grade": 2, "room": "305"}, {"hak": "3510", "name": "복지환", "grade": 3, "room": "520"}, {"hak": "1409", "name": "김진혁", "grade": 1, "room": "220"}, {"hak": "2415", "name": "정상훈", "grade": 2, "room": "306"}, {"hak": "3511", "name": "오주원", "grade": 3, "room": "521"}, {"hak": "1410", "name": "나온유", "grade": 1, "room": "221"}, {"hak": "2416", "name": "정성운", "grade": 2, "room": "414"}, {"hak": "3512", "name": "윤서진B", "grade": 3, "room": "522"}, {"hak": "1411", "name": "노영준", "grade": 1, "room": "218"}, {"hak": "2417", "name": "최민욱", "grade": 2, "room": "306"}, {"hak": "3513", "name": "은준일", "grade": 3, "room": "519"}, {"hak": "1412", "name": "박무혁", "grade": 1, "room": "219"}, {"hak": "2418", "name": "최준혁", "grade": 2, "room": "304"}, {"hak": "3514", "name": "이지민", "grade": 3, "room": "520"}, {"hak": "1413", "name": "박지호", "grade": 1, "room": "220"}, {"hak": "2419", "name": "한명호", "grade": 2, "room": "305"}, {"hak": "3515", "name": "정유찬B", "grade": 3, "room": "521"}, {"hak": "1414", "name": "선지우", "grade": 1, "room": "221"}, {"hak": "2420", "name": "호윤", "grade": 2, "room": "306"}, {"hak": "3516", "name": "최민기", "grade": 3, "room": "522"}, {"hak": "1415", "name": "손건우", "grade": 1, "room": "218"}, {"hak": "2507", "name": "김민수", "grade": 2, "room": "307"}, {"hak": "3604", "name": "강민성", "grade": 3, "room": "523"}, {"hak": "1416", "name": "이명준", "grade": 1, "room": "219"}, {"hak": "2508", "name": "김민준", "grade": 2, "room": "308"}, {"hak": "3605", "name": "기석진", "grade": 3, "room": "524"}, {"hak": "1417", "name": "이승준", "grade": 1, "room": "220"}, {"hak": "2509", "name": "김윤범", "grade": 2, "room": "309"}, {"hak": "3606", "name": "김민소", "grade": 3, "room": "523"}, {"hak": "1418", "name": "장교윤", "grade": 1, "room": "221"}, {"hak": "2510", "name": "김은찬", "grade": 2, "room": "310"}, {"hak": "3608", "name": "박시준", "grade": 3, "room": "517"}, {"hak": "1419", "name": "진유준", "grade": 1, "room": "218"}, {"hak": "2511", "name": "박사언", "grade": 2, "room": "307"}, {"hak": "3609", "name": "박준서", "grade": 3, "room": "524"}, {"hak": "1420", "name": "진현우", "grade": 1, "room": "220"}, {"hak": "2512", "name": "박의찬", "grade": 2, "room": "308"}, {"hak": "3610", "name": "서유찬", "grade": 3, "room": "525"}, {"hak": "1421", "name": "최시원", "grade": 1, "room": "221"}, {"hak": "2513", "name": "안경민", "grade": 2, "room": "309"}, {"hak": "3611", "name": "윤준혁", "grade": 3, "room": "517"}, {"hak": "1505", "name": "강태양", "grade": 1, "room": "222"}, {"hak": "2514", "name": "이동우", "grade": 2, "room": "310"}, {"hak": "3612", "name": "이은재", "grade": 3, "room": "524"}, {"hak": "1506", "name": "권순우", "grade": 1, "room": "223"}, {"hak": "2515", "name": "조민건", "grade": 2, "room": "307"}, {"hak": "3613", "name": "이재흔", "grade": 3, "room": "525"}, {"hak": "1507", "name": "김민결", "grade": 1, "room": "224"}, {"hak": "2516", "name": "조승윤", "grade": 2, "room": "308"}, {"hak": "3614", "name": "장우주", "grade": 3, "room": "523"}, {"hak": "1508", "name": "김준호", "grade": 1, "room": "225"}, {"hak": "2517", "name": "최연우", "grade": 2, "room": "309"}, {"hak": "3615", "name": "전근태", "grade": 3, "room": "525"}, {"hak": "1509", "name": "김태민", "grade": 1, "room": "222"}, {"hak": "2518", "name": "최지완", "grade": 2, "room": "310"}, {"hak": "1510", "name": "노연성", "grade": 1, "room": "223"}, {"hak": "2519", "name": "최호준", "grade": 2, "room": "307"}, {"hak": "1511", "name": "문재웅", "grade": 1, "room": "224"}, {"hak": "2520", "name": "황호신", "grade": 2, "room": "309"}, {"hak": "1512", "name": "박상원", "grade": 1, "room": "225"}, {"hak": "2607", "name": "고은찬", "grade": 2, "room": "311"}, {"hak": "1513", "name": "백석훈", "grade": 1, "room": "222"}, {"hak": "2608", "name": "고채운", "grade": 2, "room": "312"}, {"hak": "1514", "name": "송규빈", "grade": 1, "room": "223"}, {"hak": "2609", "name": "김규현", "grade": 2, "room": "314"}, {"hak": "1515", "name": "안우빈", "grade": 1, "room": "224"}, {"hak": "2610", "name": "김영교", "grade": 2, "room": "315"}, {"hak": "1516", "name": "이강희", "grade": 1, "room": "225"}, {"hak": "2611", "name": "변재원", "grade": 2, "room": "311"}, {"hak": "1517", "name": "이선빈", "grade": 1, "room": "222"}, {"hak": "2612", "name": "변준우", "grade": 2, "room": "312"}, {"hak": "1518", "name": "전주안", "grade": 1, "room": "223"}, {"hak": "2613", "name": "이상현", "grade": 2, "room": "314"}, {"hak": "1519", "name": "조민재", "grade": 1, "room": "224"}, {"hak": "2614", "name": "이종현", "grade": 2, "room": "315"}, {"hak": "1520", "name": "차호연", "grade": 1, "room": "225"}, {"hak": "2615", "name": "이준용", "grade": 2, "room": "311"}, {"hak": "1605", "name": "김건호", "grade": 1, "room": "316"}, {"hak": "2616", "name": "임영석", "grade": 2, "room": "312"}, {"hak": "1606", "name": "김도훈", "grade": 1, "room": "317"}, {"hak": "2617", "name": "임채정", "grade": 2, "room": "314"}, {"hak": "1607", "name": "문장원", "grade": 1, "room": "318"}, {"hak": "2618", "name": "최준영B", "grade": 2, "room": "315"}, {"hak": "1608", "name": "박준하", "grade": 1, "room": "319"}, {"hak": "2619", "name": "한석일", "grade": 2, "room": "311"}, {"hak": "1609", "name": "서준원", "grade": 1, "room": "316"}, {"hak": "2620", "name": "황선하", "grade": 2, "room": "315"}, {"hak": "1610", "name": "선정하", "grade": 1, "room": "317"}, {"hak": "2707", "name": "가경빈", "grade": 2, "room": "302"}, {"hak": "1611", "name": "어예성", "grade": 1, "room": "318"}, {"hak": "2708", "name": "김동규", "grade": 2, "room": "301"}, {"hak": "1612", "name": "엄재홍", "grade": 1, "room": "319"}, {"hak": "2709", "name": "김민결", "grade": 2, "room": "324"}, {"hak": "1613", "name": "오상훈", "grade": 1, "room": "316"}, {"hak": "2710", "name": "김민석", "grade": 2, "room": "325"}, {"hak": "1614", "name": "이서준", "grade": 1, "room": "317"}, {"hak": "2711", "name": "김선학", "grade": 2, "room": "303"}, {"hak": "1615", "name": "이준서B", "grade": 1, "room": "318"}, {"hak": "2712", "name": "김지인", "grade": 2, "room": "301"}, {"hak": "1616", "name": "이현근", "grade": 1, "room": "319"}, {"hak": "2713", "name": "신재훈", "grade": 2, "room": "324"}, {"hak": "1617", "name": "정지헌", "grade": 1, "room": "316"}, {"hak": "2714", "name": "윤재원", "grade": 2, "room": "325"}, {"hak": "1618", "name": "정현우", "grade": 1, "room": "317"}, {"hak": "2715", "name": "이윤혁", "grade": 2, "room": "303"}, {"hak": "1619", "name": "한승우", "grade": 1, "room": "318"}, {"hak": "2716", "name": "이진", "grade": 2, "room": "301"}, {"hak": "1620", "name": "홍지헌", "grade": 1, "room": "319"}, {"hak": "2717", "name": "전승민", "grade": 2, "room": "324"}, {"hak": "1705", "name": "권성준", "grade": 1, "room": "320"}, {"hak": "2718", "name": "진수철", "grade": 2, "room": "325"}, {"hak": "1706", "name": "김범찬", "grade": 1, "room": "321"}, {"hak": "2719", "name": "허승", "grade": 2, "room": "303"}, {"hak": "1707", "name": "김준성B", "grade": 1, "room": "322"}, {"hak": "2720", "name": "황성훈", "grade": 2, "room": "324"}, {"hak": "1708", "name": "김지태", "grade": 1, "room": "323"}, {"hak": "1709", "name": "서은철", "grade": 1, "room": "320"}, {"hak": "1710", "name": "신승헌", "grade": 1, "room": "321"}, {"hak": "1711", "name": "신승호", "grade": 1, "room": "322"}, {"hak": "1712", "name": "우현욱", "grade": 1, "room": "323"}, {"hak": "1713", "name": "유용헌", "grade": 1, "room": "320"}, {"hak": "1714", "name": "이승훈", "grade": 1, "room": "321"}, {"hak": "1715", "name": "이은찬", "grade": 1, "room": "322"}, {"hak": "1716", "name": "이정준", "grade": 1, "room": "323"}, {"hak": "1717", "name": "이준서C", "grade": 1, "room": "320"}, {"hak": "1718", "name": "조진호", "grade": 1, "room": "321"}, {"hak": "1719", "name": "진평안", "grade": 1, "room": "322"}, {"hak": "1720", "name": "최다엘", "grade": 1, "room": "323"}], "defaultExclusions": [{"hak": "2219", "name": "정성우", "status": "퇴사"}, {"hak": "2306", "name": "강준혁", "status": "퇴사"}, {"hak": "2409", "name": "김성훈", "status": "귀가"}, {"hak": "2514", "name": "이동우", "status": "퇴사"}, {"hak": "2608", "name": "고채운", "status": "퇴사"}, {"hak": "2618", "name": "최준영B", "status": "귀가"}], "defaultDate": "2026-06-04"};
+const STUDENTS_DEFAULT = DORM_DATA.students; // {hak,name,grade,room}
+const DEFAULT_DATE = DORM_DATA.defaultDate;
+const DEFAULT_EXCL = DORM_DATA.defaultExclusions;
+
+const INDIV_ITEMS = ["침구 미정리","실외화 반입"];
+const ROOM_ITEMS  = ["호실정리불량","슬리퍼 미정리","미소등"];
+const MERIT_PTS = {"상":3,"중":2,"하":1};
+const STORE_KEY = "dormCheckoutData_v1";
+const ROSTER_KEY = "dormRoster_v1";
+
+/* 활성 명단(방배정) — localStorage 등록본 우선, 없으면 기본 내장 */
+let STUDENTS=[], byHak={}, FLOORS={}, ROOMS={};
+let rosterMeta = { source:"기본 내장 명단", count:0, when:"" };
+
+function buildRoster(students){
+  STUDENTS = students.slice();
+  byHak={}; FLOORS={}; ROOMS={};
+  STUDENTS.forEach(s=>byHak[s.hak]=s);
+  const FS={};
+  STUDENTS.forEach(s=>{
+    const fl=String(s.room)[0];
+    (ROOMS[s.room]=ROOMS[s.room]||[]).push(s);
+    FS[fl]=FS[fl]||new Set(); FS[fl].add(s.room);
+  });
+  Object.keys(FS).forEach(fl=>FLOORS[fl]=[...FS[fl]].sort((a,b)=>+a-+b));
+  // 호실 내 학번 오름차순 정렬 (위→아래)
+  Object.keys(ROOMS).forEach(no=>ROOMS[no].sort((a,b)=>String(a.hak).localeCompare(String(b.hak),undefined,{numeric:true})));
+}
+
+function loadRoster(){
+  try{
+    const d=JSON.parse(localStorage.getItem(ROSTER_KEY));
+    if(d && d.students && d.students.length){ rosterMeta=d.meta||rosterMeta; buildRoster(d.students); return; }
+  }catch(e){}
+  rosterMeta={source:"기본 내장 명단", count:DORM_DATA.students.length, when:""};
+  buildRoster(DORM_DATA.students);
+}
+loadRoster();
+
+/* ===== 저장소 ===== */
+let DB = load();
+function load(){
+  try{ const d=JSON.parse(localStorage.getItem(STORE_KEY)); if(d&&d.records) return d; }catch(e){}
+  return { progTitle:"기숙사 호실별 상벌점 체크아웃",
+           tabs:[{floor:"2",title:"2층"},{floor:"3",title:"3층"}],
+           meritLog:[], records:{} };
+}
+function save(){ localStorage.setItem(STORE_KEY, JSON.stringify(DB)); }
+
+function todayStr(){ const d=new Date();
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
+function localHour(){ return new Date().getHours(); }
+
+let curDate = todayStr();   // 실제 오늘 날짜로 시작 (전날 기록은 날짜별로 보관)
+let curTab = 0;
+let autoFollow = true;      // 오늘 자동 추종 여부(과거 날짜 열람 시 false)
+
+/* 날짜 레코드 가져오기(없으면 생성: 장기 제외자 승계) */
+function rec(date){
+  if(DB.records[date]) return DB.records[date];
+  const r={individual:{},room:{},exclusions:{},memo:""};
+  // 직전 날짜의 장기(퇴사/미입사)만 승계, 또는 샘플기준일이면 기본 제외자 시드
+  const prior = Object.keys(DB.records).filter(d=>d<date).sort();
+  if(prior.length){
+    const p=DB.records[prior[prior.length-1]];
+    Object.entries(p.exclusions||{}).forEach(([h,st])=>{ if(st==="퇴사"||st==="미입사") r.exclusions[h]=st; });
+  }else if(date===DEFAULT_DATE){
+    DEFAULT_EXCL.forEach(e=>r.exclusions[e.hak]=e.status);
+  }
+  DB.records[date]=r; return r;
+}
+function R(){ return rec(curDate); }
+
+/* ===== 자동 초기화(날짜 자동 전환) =====
+   - 기록은 날짜별로 영구 보관되므로 기간 집계에 영향 없음.
+   - 달력상 새 날이 시작되면 오늘 시트(빈 시트)로 자동 전환.
+   - 오전 11시 기준으로 '당일 정리' 표시를 갱신(데이터 삭제 없음). */
+let _autoTimer=null;
+function modalOpen(){ return [...document.querySelectorAll('.ov')].some(o=>o.classList.contains('show')); }
+function autoRollCheck(){
+  const t=todayStr(), h=localHour();
+  if(autoFollow && curDate < t && !modalOpen()){
+    curDate = t;
+    document.getElementById('date-input').value = t;
+    render();
+    toast(`${t} 새 날짜 시트로 자동 전환 (전날 기록은 보관)`);
+  }
+  if(h>=11 && DB.lastAutoClear!==t){ DB.lastAutoClear=t; save(); }
+}
+
+/* ===== 초기화 ===== */
+function init(){
+  if(!DB.lastAutoClear) DB.lastAutoClear='';
+  document.getElementById('date-input').value = curDate;
+  document.getElementById('prog-title').textContent = DB.progTitle;
+  const memoEl=document.getElementById('memo');
+  if(!memoEl._bound){ memoEl.addEventListener('input', e=>{ R().memo=e.target.value; save(); }); memoEl._bound=true; }
+  renderTabs(); render(); setupMemoScroll();
+  autoRollCheck();
+  if(_autoTimer) clearInterval(_autoTimer);
+  _autoTimer=setInterval(autoRollCheck, 60000);
+  save();
+}
+document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) autoRollCheck(); });
+window.addEventListener('focus', autoRollCheck);
+
+function onDateChange(){
+  curDate=document.getElementById('date-input').value||todayStr();
+  autoFollow = (curDate >= todayStr());   // 과거 날짜를 보면 자동전환 멈춤
+  render();
+}
+function goToday(){ curDate=todayStr(); autoFollow=true;
+  document.getElementById('date-input').value=curDate; render(); }
+
+function renderTabs(){
+  const t=document.getElementById('tabs'); t.innerHTML='';
+  DB.tabs.forEach((tb,i)=>{
+    const b=document.createElement('button');
+    b.className='tab'+(i===curTab?' active':'');
+    b.innerHTML=`${tb.title}<span class="edit">✎</span>`;
+    b.onclick=(e)=>{ if(e.target.classList.contains('edit')){editTab(i);return;} curTab=i; render(); };
+    t.appendChild(b);
+  });
+}
+
+/* ===== 메인 렌더 ===== */
+function render(){
+  document.getElementById('date-input').value=curDate;
+  renderTabs();
+  const tb=DB.tabs[curTab]; const fl=tb.floor;
+  const r=R();
+  document.getElementById('memo').value=r.memo||"";
+  const grid=document.getElementById('grid'); grid.innerHTML='';
+  const rooms=FLOORS[fl]||[];
+  rooms.forEach(no=>{
+    const studs=ROOMS[no];
+    const rd=r.room[no]||{demerits:{},merit:""};
+    const roomDem=Object.keys(rd.demerits||{}).filter(k=>rd.demerits[k]);
+    const flagged = roomDem.length>0;
+    const card=document.createElement('div');
+    card.className='room'+(flagged?' flagged':'')+(rd.merit?' merit':'');
+    // 헤더
+    let badges='';
+    roomDem.forEach(d=>badges+=`<span class="bd bd-room">${shortDem(d)}</span>`);
+    if(rd.merit) badges+=`<span class="bd bd-merit">상점 ${rd.merit}</span>`;
+    card.innerHTML=`<div class="room-head" onclick="openRoom('${no}')">
+        <span class="room-no">${no}호 <span class="gear">⚙</span></span>
+        <span class="badges">${badges}</span></div>`;
+    // 학생
+    const sc=document.createElement('div'); sc.className='students';
+    studs.forEach(s=>{
+      const st=r.exclusions[s.hak];
+      const div=document.createElement('div');
+      if(st){
+        div.className='stu excluded';
+        div.innerHTML=`<span class="gdot g${s.grade}"></span><span class="hk">${s.hak}</span><span class="nm">${s.name}</span>
+          <span class="ex-tag ex-${st}">${st}</span>`;
+      }else{
+        const ind=r.individual[s.hak]||{};
+        const has=Object.keys(ind).filter(k=>ind[k]);
+        div.className='stu'+(has.length?' has':'');
+        div.innerHTML=`<span class="gdot g${s.grade}"></span><span class="hk">${s.hak}</span><span class="nm">${s.name}</span>
+          ${has.length?`<span class="mk">${has.map(shortDem).join(' ')}</span>`:''}`;
+        div.onclick=()=>openStu(s.hak);
+      }
+      sc.appendChild(div);
+    });
+    card.appendChild(sc);
+    grid.appendChild(card);
+  });
+  renderStat(fl);
+  renderLinkBar();
+  fitGrid();
+}
+function shortDem(d){
+  return {"침구 미정리":"침구","실외화 반입":"실외화","호실정리불량":"정리불량","슬리퍼 미정리":"슬리퍼","미소등":"미소등"}[d]||d;
+}
+function renderStat(fl){
+  const r=R(); const rooms=FLOORS[fl]||[];
+  let nStu=0,nExcl=0,nIndiv=0,nRoom=0,nMerit=0;
+  rooms.forEach(no=>{
+    ROOMS[no].forEach(s=>{ nStu++; if(r.exclusions[s.hak])nExcl++;
+      else{ const ind=r.individual[s.hak]||{}; if(Object.values(ind).some(v=>v))nIndiv++; } });
+    const rd=r.room[no]; if(rd){ if(Object.values(rd.demerits||{}).some(v=>v))nRoom++; if(rd.merit)nMerit++; }
+  });
+  document.getElementById('stat').innerHTML=
+    `${DB.tabs[curTab].title} · 호실 <b>${rooms.length}</b> · 인원 <b>${nStu-nExcl}</b>명(제외 ${nExcl}) · `+
+    `개인벌점 <b style="color:#dc2626">${nIndiv}</b>명 · 호실벌점 <b style="color:#dc2626">${nRoom}</b>실 · 정리우수 <b style="color:#16a34a">${nMerit}</b>실`;
+}
+
+/* ===== 개인 벌점 모달 ===== */
+/* 중복 탭(터치+합성 클릭/더블탭) 방지 + 클릭 바인딩 */
+function attachTap(el, fn){
+  el.addEventListener('click', function(e){
+    const now=Date.now();
+    if(el._lastTap && now-el._lastTap<320) return;   // 직전 탭과 너무 가까우면 무시
+    el._lastTap=now; fn(e);
+  });
+}
+
+let stuTarget=null, stuSel={};
+function openStu(hak){
+  stuTarget=hak; const s=byHak[hak]; const r=R();
+  stuSel=Object.assign({}, r.individual[hak]||{});
+  document.getElementById('stu-title').textContent=`${s.room}호 · ${s.hak} ${s.name} (${s.grade}학년)`;
+  const box=document.getElementById('stu-opts'); box.innerHTML='';
+  INDIV_ITEMS.forEach(it=>{
+    const d=document.createElement('div'); d.className='opt';
+    const ck=document.createElement('span'); ck.className='ck';
+    const tx=document.createElement('span'); tx.className='opt-label'; tx.textContent=it;
+    d.appendChild(ck); d.appendChild(tx);
+    const paint=()=>{ const sel=!!stuSel[it]; d.classList.toggle('sel',sel); ck.textContent=sel?'✓':''; };
+    paint();
+    attachTap(d, ()=>{ stuSel[it]=!stuSel[it]; paint(); });
+    box.appendChild(d);
+  });
+  showOv('ov-stu');
+}
+function saveStu(){
+  const r=R(); const clean={}; Object.keys(stuSel).forEach(k=>{if(stuSel[k])clean[k]=true;});
+  if(Object.keys(clean).length) r.individual[stuTarget]=clean; else delete r.individual[stuTarget];
+  save(); closeOv('ov-stu'); render(); toast('저장되었습니다');
+}
+function clearStu(){ stuSel={}; openStu(stuTarget); }
+
+/* ===== 호실 전체 모달 ===== */
+let roomTarget=null, roomSel={}, meritSel="";
+function openRoom(no){
+  roomTarget=no; const r=R(); const rd=r.room[no]||{demerits:{},merit:""};
+  roomSel=Object.assign({}, rd.demerits||{}); meritSel=rd.merit||"";
+  const studs=ROOMS[no]; const active=studs.filter(s=>!r.exclusions[s.hak]).length; const ex=studs.length-active;
+  document.getElementById('room-title').textContent=`${no}호 전체 (재실 ${active}명${ex?` · 제외 ${ex}`:''})`;
+  const box=document.getElementById('room-opts'); box.innerHTML='';
+  if(active===0){ box.innerHTML='<div class="hint" style="color:#dc2626">재실 인원이 없어 전체 벌점을 입력할 수 없습니다.</div>'; }
+  else ROOM_ITEMS.forEach(it=>{
+    const d=document.createElement('div'); d.className='opt';
+    const ck=document.createElement('span'); ck.className='ck';
+    const tx=document.createElement('span'); tx.className='opt-label'; tx.textContent=it;
+    d.appendChild(ck); d.appendChild(tx);
+    const paint=()=>{ const sel=!!roomSel[it]; d.classList.toggle('sel',sel); ck.textContent=sel?'✓':''; };
+    paint();
+    attachTap(d, ()=>{ roomSel[it]=!roomSel[it]; paint(); });
+    box.appendChild(d);
+  });
+  const mr=document.getElementById('merit-opts'); mr.innerHTML='';
+  const btns={};
+  ["상","중","하"].forEach(g=>{
+    const b=document.createElement('div'); b.className='mb'; b.textContent=g;
+    btns[g]=b;
+    attachTap(b, ()=>{ meritSel=(meritSel===g?'':g);
+      Object.keys(btns).forEach(k=>btns[k].classList.toggle('sel', meritSel===k)); });
+    mr.appendChild(b);
+  });
+  Object.keys(btns).forEach(k=>btns[k].classList.toggle('sel', meritSel===k));
+  showOv('ov-room');
+}
+function saveRoom(){
+  const r=R(); const clean={}; Object.keys(roomSel).forEach(k=>{if(roomSel[k])clean[k]=true;});
+  if(Object.keys(clean).length||meritSel) r.room[roomTarget]={demerits:clean,merit:meritSel};
+  else delete r.room[roomTarget];
+  save(); closeOv('ov-room'); render(); toast('저장되었습니다');
+}
+function clearRoom(){ roomSel={}; meritSel=""; openRoom(roomTarget); }
+
+/* ===== 귀가/퇴사 관리 ===== */
+function openExcl(){ document.getElementById('excl-paste').value=''; document.getElementById('excl-search').value='';
+  document.getElementById('excl-search-list').innerHTML=''; renderExclCurrent(); showOv('ov-excl'); }
+function applyPaste(){
+  const txt=document.getElementById('excl-paste').value; const r=R(); let cnt=0;
+  txt.split(/\n+/).forEach(line=>{
+    line=line.trim(); if(!line) return;
+    let status="미입사";
+    if(/귀가/.test(line)) status="귀가";
+    else if(/퇴사/.test(line)) status="퇴사";
+    else if(/미입사|미입소|미입실/.test(line)) status="미입사";
+    const hakM=line.match(/\b(\d{4})\b/);
+    let target=null;
+    if(hakM && byHak[hakM[1]]) target=hakM[1];
+    if(!target){ // 이름 매칭
+      const cand=STUDENTS.filter(s=>line.includes(s.name));
+      if(cand.length===1) target=cand[0].hak;
+    }
+    if(target){ r.exclusions[target]=status; cnt++; }
+  });
+  save(); document.getElementById('excl-paste').value=''; renderExclCurrent(); render();
+  toast(cnt?`${cnt}명 반영됨`:'매칭된 학생이 없습니다');
+}
+function renderExclSearch(){
+  const q=document.getElementById('excl-search').value.trim(); const list=document.getElementById('excl-search-list');
+  if(!q){ list.innerHTML=''; return; }
+  const r=R();
+  const res=STUDENTS.filter(s=>(s.name.includes(q)||s.hak.includes(q))&&!r.exclusions[s.hak]).slice(0,8);
+  list.innerHTML=res.map(s=>`<div class="ex-item"><span class="enm">${s.room}호 ${s.name} (${s.hak})</span>
+    <button class="btn btn-g" style="flex:0;padding:6px 10px;font-size:12px" onclick="addExcl('${s.hak}')">추가</button></div>`).join('')
+    || '<div class="hint">일치하는 학생이 없습니다.</div>';
+}
+function addExcl(hak){ R().exclusions[hak]="귀가"; save(); document.getElementById('excl-search').value='';
+  document.getElementById('excl-search-list').innerHTML=''; renderExclCurrent(); }
+function renderExclCurrent(){
+  const r=R(); const box=document.getElementById('excl-current');
+  const ents=Object.keys(r.exclusions).filter(h=>byHak[h]).sort((a,b)=>byHak[a].room-byHak[b].room);
+  if(!ents.length){ box.innerHTML='<div class="hint">현재 제외 대상이 없습니다.</div>'; return; }
+  box.innerHTML=ents.map(h=>{ const s=byHak[h]; const st=r.exclusions[h];
+    return `<div class="ex-item"><span class="enm">${s.room}호 ${s.name} (${s.hak})</span>
+      <select onchange="setExcl('${h}',this.value)">
+        ${["귀가","퇴사","미입사"].map(o=>`<option ${o===st?'selected':''}>${o}</option>`).join('')}
+      </select>
+      <button class="btn btn-r" style="flex:0;padding:6px 9px;font-size:12px" onclick="rmExcl('${h}')">해제</button></div>`;
+  }).join('');
+}
+function setExcl(h,v){ R().exclusions[h]=v; save(); }
+function rmExcl(h){ delete R().exclusions[h]; save(); renderExclCurrent(); render(); }
+function clearAllExcl(){ if(!confirm('현재 날짜의 제외 대상을 모두 해제할까요?'))return;
+  R().exclusions={}; save(); renderExclCurrent(); render(); }
+
+/* ===== 상점 순위 집계 ===== */
+function openMerit(){
+  const to=curDate; const from=addDays(curDate,-13);
+  document.getElementById('merit-from').value=from;
+  document.getElementById('merit-to').value=to;
+  document.getElementById('merit-result').innerHTML='';
+  renderMeritLog(); showOv('ov-merit'); calcMerit();
+}
+function calcMerit(){
+  const from=document.getElementById('merit-from').value, to=document.getElementById('merit-to').value;
+  const N=+document.getElementById('merit-n').value||5;
+  const sel=[...document.querySelectorAll('#merit-floors input:checked')].map(c=>c.value);
+  const res=document.getElementById('merit-result');
+  if(!sel.length){ res.innerHTML='<div class="hint">대상 층을 1개 이상 선택하세요.</div>'; return; }
+  // 선택 층의 모든 호실을 0점으로 초기화(표시 없는 날=0점 합산)
+  const scores={}, detail={};
+  sel.forEach(fl=>(FLOORS[fl]||[]).forEach(no=>{ scores[no]=0; detail[no]=[]; }));
+  Object.keys(DB.records).forEach(d=>{
+    if(d<from||d>to) return;
+    const rr=DB.records[d].room||{};
+    Object.entries(rr).forEach(([no,rd])=>{
+      if(!(no in scores)) return;             // 선택 층 밖
+      if(rd.merit){ scores[no]+=MERIT_PTS[rd.merit]; detail[no].push(rd.merit); }
+    });
+  });
+  const ranked=Object.keys(scores).sort((a,b)=>scores[b]-scores[a]||(+a-+b));
+  if(!ranked.length){ res.innerHTML='<div class="hint">대상 호실이 없습니다.</div>'; return; }
+  let h=`<div class="m-sub">대상: ${sel.map(f=>f+'층').join(', ')} · 호실 ${ranked.length}개</div>`;
+  h+=`<table class="tbl"><tr><th>순위</th><th>호실</th><th>점수</th><th>등급내역(상·중·하)</th><th>선택</th></tr>`;
+  ranked.forEach((no,i)=>{
+    const cnt={상:0,중:0,하:0}; detail[no].forEach(g=>cnt[g]++);
+    h+=`<tr class="${i<N?'top':''}"><td>${i+1}</td><td><b>${no}호</b></td><td>${scores[no]}</td>
+      <td>${cnt.상}·${cnt.중}·${cnt.하}</td>
+      <td><input type="checkbox" class="award-ck" data-no="${no}" ${i<N&&scores[no]>0?'checked':''}></td></tr>`;
+  });
+  h+=`</table><button class="btn btn-g" style="margin-top:10px" onclick="awardMerit('${from}','${to}')">✅ 체크한 호실에 상점 부여 기록</button>`;
+  res.innerHTML=h;
+}
+function awardMerit(from,to){
+  const cks=[...document.querySelectorAll('.award-ck:checked')].map(c=>c.dataset.no);
+  if(!cks.length){ toast('부여할 호실을 선택하세요'); return; }
+  const note=prompt(`상점 부여 호실: ${cks.join(', ')}\n메모(선택):`,'2주 정리정돈 우수 상점');
+  if(note===null) return;
+  DB.meritLog.unshift({date:new Date().toISOString().slice(0,10),period:`${from}~${to}`,rooms:cks,note});
+  save(); renderMeritLog(); toast(`${cks.length}개 호실 상점 부여 기록됨`);
+}
+function renderMeritLog(){
+  const box=document.getElementById('merit-log');
+  if(!DB.meritLog||!DB.meritLog.length){ box.innerHTML='<div class="hint">아직 상점 부여 기록이 없습니다.</div>'; return; }
+  box.innerHTML=DB.meritLog.map((m,i)=>`<div class="ex-item"><span class="enm">
+    <b>${m.date}</b> · ${m.rooms.join(', ')}호<br><span style="font-size:12px;color:#64748b">${m.note||''} (${m.period})</span></span>
+    <button class="btn btn-r" style="flex:0;padding:6px 9px;font-size:12px" onclick="rmMeritLog(${i})">삭제</button></div>`).join('');
+}
+function rmMeritLog(i){ DB.meritLog.splice(i,1); save(); renderMeritLog(); }
+
+/* ===== 오늘 집계 ===== */
+function openSummary(){
+  const r=R(); let out=`■ ${DB.progTitle}\n■ 체크일: ${curDate}\n\n`;
+  Object.keys(FLOORS).sort().forEach(fl=>{
+    const rooms=FLOORS[fl]; if(!rooms) return;
+    let block=''; 
+    rooms.forEach(no=>{
+      const rd=r.room[no]||{}; const rdem=Object.keys(rd.demerits||{}).filter(k=>rd.demerits[k]);
+      const lines=[];
+      if(rdem.length) lines.push(`   · [호실벌점] ${rdem.join(', ')}`);
+      if(rd.merit) lines.push(`   · [정리우수] ${rd.merit}`);
+      ROOMS[no].forEach(s=>{
+        if(r.exclusions[s.hak]){ lines.push(`   · ${s.hak} ${s.name}: (${r.exclusions[s.hak]})`); return; }
+        const ind=r.individual[s.hak]||{}; const ks=Object.keys(ind).filter(k=>ind[k]);
+        if(ks.length) lines.push(`   · ${s.hak} ${s.name}: ${ks.join(', ')}`);
+      });
+      if(lines.length) block+=`${no}호\n${lines.join('\n')}\n`;
+    });
+    if(block) out+=`【${fl}층】\n${block}\n`;
+  });
+  // 합계
+  let ti=0,tr=0,tm=0;
+  Object.values(r.individual).forEach(v=>{if(Object.values(v).some(x=>x))ti++;});
+  Object.values(r.room).forEach(v=>{if(Object.values(v.demerits||{}).some(x=>x))tr++; if(v.merit)tm++;});
+  out+=`────────────\n개인벌점 대상 ${ti}명 · 호실벌점 ${tr}실 · 정리우수 ${tm}실`;
+  if(r.memo) out+=`\n\n[메모]\n${r.memo}`;
+  document.getElementById('sum-text').textContent=out;
+  showOv('ov-sum');
+}
+function copySummary(){ const t=document.getElementById('sum-text').textContent;
+  navigator.clipboard?.writeText(t).then(()=>toast('복사되었습니다'),()=>fallbackCopy(t)); }
+function fallbackCopy(t){ const ta=document.createElement('textarea'); ta.value=t; document.body.appendChild(ta);
+  ta.select(); try{document.execCommand('copy');toast('복사되었습니다');}catch(e){} ta.remove(); }
+
+/* ===== 백업 / 복원 ===== */
+function doBackup(){
+  const blob=new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});
+  const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
+  a.download=`기숙사체크아웃_전체백업_${todayStr().replace(/-/g,'')}.json`; a.click(); URL.revokeObjectURL(a.href);
+  const n=Object.keys(DB.records||{}).length;
+  toast(`전체 백업 완료 (기록 ${n}일분, 파일 1개)`);
+}
+function doRestore(ev){
+  const f=ev.target.files[0]; if(!f)return;
+  const rd=new FileReader();
+  rd.onload=e=>{ try{ const d=JSON.parse(e.target.result);
+      if(!d.records){ toast('올바른 백업 파일이 아닙니다'); return; }
+      const n=Object.keys(d.records).length;
+      if(!confirm(`이 백업 파일로 복원할까요? (기록 ${n}일분)\n현재 기기의 입력 내용은 파일 내용으로 대체됩니다.`)) return;
+      DB=d; if(!DB.meritLog)DB.meritLog=[]; if(!DB.tabs)DB.tabs=[{floor:"2",title:"2층"},{floor:"3",title:"3층"}];
+      if(!DB.lastAutoClear)DB.lastAutoClear='';
+      curDate=todayStr(); autoFollow=true; closeOv('ov-data');
+      save(); init();
+      toast(`복원 완료 (${n}일분) — 달력에서 날짜를 선택하세요`);
+      openCalendar(true);          // 복원 후 달력 팝업으로 날짜 선택
+    }catch(err){ toast('파일을 읽을 수 없습니다'); } };
+  rd.readAsText(f); ev.target.value='';
+}
+
+/* ===== 기록 달력 ===== */
+let calY, calM;
+function dataDays(){
+  const s=new Set();
+  Object.entries(DB.records||{}).forEach(([d,r])=>{
+    const has = (r.individual&&Object.keys(r.individual).length) ||
+                (r.room&&Object.keys(r.room).length) ||
+                (r.memo&&r.memo.trim());
+    if(has) s.add(d);
+  });
+  return s;
+}
+function openCalendar(afterRestore){
+  const days=[...dataDays()].sort();
+  const focus = (afterRestore && days.length) ? days[days.length-1] : (curDate||todayStr());
+  const f=new Date(focus+'T00:00'); calY=f.getFullYear(); calM=f.getMonth();
+  renderCal(); showOv('ov-cal');
+}
+function calShift(n){ const dt=new Date(calY, calM+n, 1); calY=dt.getFullYear(); calM=dt.getMonth(); renderCal(); }
+function renderCal(){
+  const has=dataDays(); const today=todayStr();
+  const startDow=new Date(calY,calM,1).getDay();
+  const dim=new Date(calY,calM+1,0).getDate();
+  let h=`<div class="cal-nav"><button class="cal-arrow" onclick="calShift(-1)">‹</button>`+
+        `<b>${calY}년 ${calM+1}월</b><button class="cal-arrow" onclick="calShift(1)">›</button></div>`;
+  h+=`<div class="cal-grid">`;
+  ['일','월','화','수','목','금','토'].forEach((w,i)=>h+=`<div class="cal-w${i===0?' sun':''}">${w}</div>`);
+  for(let i=0;i<startDow;i++) h+=`<div></div>`;
+  for(let d=1; d<=dim; d++){
+    const ds=`${calY}-${String(calM+1).padStart(2,'0')}-${String(d).padStart(2,'0')}`;
+    const cls=['cal-d']; if(has.has(ds))cls.push('has'); if(ds===today)cls.push('today'); if(ds===curDate)cls.push('cur');
+    h+=`<button class="${cls.join(' ')}" onclick="pickDate('${ds}')">${d}</button>`;
+  }
+  h+=`</div>`;
+  document.getElementById('cal-body').innerHTML=h;
+}
+function pickDate(ds){
+  curDate=ds; autoFollow=(ds>=todayStr());
+  document.getElementById('date-input').value=ds;
+  closeOv('ov-cal'); render(); toast(`${ds} 시트로 이동`);
+}
+
+/* ===== 제목 / 탭 설정 ===== */
+function editProgTitle(){ const v=prompt('프로그램 제목',DB.progTitle); if(v!==null&&v.trim()){DB.progTitle=v.trim();
+  document.getElementById('prog-title').textContent=DB.progTitle; save();} }
+function editTab(i){ const v=prompt('탭 이름',DB.tabs[i].title); if(v!==null&&v.trim()){DB.tabs[i].title=v.trim(); save(); renderTabs(); render();} }
+function openData(){
+  // 명단 상태
+  pendingRoster=null;
+  const rf=document.getElementById('roster-file'); if(rf) rf.value='';
+  document.getElementById('roster-preview').innerHTML='';
+  document.getElementById('roster-apply').disabled=true;
+  renderRosterStatus();
+  buildSetFields();
+  renderAutoInfo();
+  showOv('ov-data');
+}
+function renderRosterStatus(){
+  const tot=STUDENTS.length, fls=Object.keys(FLOORS).sort().map(f=>`${f}층 ${FLOORS[f].length}실`).join(' · ');
+  document.getElementById('roster-status').innerHTML=
+    `<div class="hint" style="border-style:solid"><b>현재 명단</b> · ${rosterMeta.source}${rosterMeta.when?` (${rosterMeta.when})`:''}<br>학생 ${tot}명 · ${fls}</div>`;
+}
+function buildSetFields(){
+  const box=document.getElementById('set-fields'); box.innerHTML='';
+  DB.tabs.forEach((tb,i)=>{
+    box.innerHTML+=`<div style="display:flex;gap:8px;margin-bottom:8px">
+      <div class="field" style="flex:0 0 130px;margin:0"><label>탭 ${i+1} 층</label>
+      <select id="set-fl-${i}">${["2","3","4","5"].map(f=>`<option value="${f}" ${f===tb.floor?'selected':''}>${f}층 (${FLOORS[f]?FLOORS[f].length:0}실)</option>`).join('')}</select></div>
+      <div class="field" style="flex:1;margin:0"><label>탭 ${i+1} 이름</label><input id="set-tt-${i}" value="${tb.title}"></div></div>`;
+  });
+}
+function renderAutoInfo(){
+  document.getElementById('auto-info').innerHTML=
+    `<div class="hint" style="border-style:solid">달력상 새 날이 시작되면 <b>당일 빈 시트</b>로 자동 전환됩니다(늦어도 오전 11시 이전). `+
+    `전날 기록은 <b>날짜별로 영구 보관</b>되어 상점·벌점 기간 집계에 영향이 없습니다.<br>`+
+    `마지막 자동전환 처리일: <b>${DB.lastAutoClear||'-'}</b> · 과거 날짜는 상단 날짜 선택으로 열람/수정할 수 있습니다.</div>`;
+}
+function openTabSet(){ openData(); }
+function saveTabSet(){
+  DB.tabs.forEach((tb,i)=>{ tb.floor=document.getElementById('set-fl-'+i).value;
+    tb.title=document.getElementById('set-tt-'+i).value.trim()||(tb.floor+'층'); });
+  save(); curTab=0; renderTabs(); render(); buildSetFields(); toast('탭 설정이 저장되었습니다');
+}
+
+/* ===== 명단(방배정) 등록 ===== */
+let pendingRoster=null, pendingRosterMeta=null;
+function openRoster(){ openData(); }
+function parseRoster(ev){
+  const f=ev.target.files[0]; if(!f) return;
+  if(typeof XLSX==='undefined'){ toast('엑셀 모듈 로딩 실패(인터넷 필요)'); return; }
+  const rd=new FileReader();
+  rd.onload=e=>{
+    try{
+      const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+      const ws=wb.Sheets[wb.SheetNames[0]];
+      const rows=XLSX.utils.sheet_to_json(ws,{header:1,defval:''});
+      const found=[]; const seen=new Set();
+      rows.forEach(row=>{
+        for(let c=0;c<row.length-2;c++){
+          const hak=String(row[c]).trim(), name=String(row[c+1]).trim(), room=String(row[c+2]).trim();
+          if(/^\d{4}$/.test(hak) && name && /^\d{3}$/.test(room) && !/[A-Za-z가-힣]/.test(room)){
+            if(seen.has(hak+'|'+name)) continue; seen.add(hak+'|'+name);
+            found.push({hak,name,grade:+hak[0]||1,room});
+          }
+        }
+      });
+      const prev=document.getElementById('roster-preview');
+      if(!found.length){ prev.innerHTML='<div class="hint" style="color:#dc2626">학번·이름·호실 형식을 찾지 못했습니다. 파일 양식을 확인하세요.</div>';
+        document.getElementById('roster-apply').disabled=true; return; }
+      pendingRoster=found;
+      pendingRosterMeta={source:'등록: '+f.name, count:found.length, when:new Date().toLocaleString('ko-KR')};
+      const fc={}; found.forEach(s=>fc[s.room[0]]=(fc[s.room[0]]||0)+1);
+      prev.innerHTML=`<div class="hint" style="border-style:solid;border-color:#10b981;color:#047857">
+        ✅ 인식 완료: 학생 <b>${found.length}</b>명 · ${Object.keys(fc).sort().map(f=>f+'층 '+fc[f]).join(' · ')}</div>`;
+      document.getElementById('roster-apply').disabled=false;
+    }catch(err){ toast('엑셀을 읽을 수 없습니다'); }
+  };
+  rd.readAsArrayBuffer(f);
+}
+function applyRoster(){
+  if(!pendingRoster) return;
+  if(!confirm(`방배정 명단을 교체할까요? (학생 ${pendingRoster.length}명)\n기존 벌점/메모 기록은 유지됩니다.`)) return;
+  localStorage.setItem(ROSTER_KEY, JSON.stringify({students:pendingRoster, meta:pendingRosterMeta}));
+  rosterMeta=pendingRosterMeta; buildRoster(pendingRoster);
+  curTab=0; renderTabs(); render(); renderRosterStatus(); buildSetFields();
+  pendingRoster=null; document.getElementById('roster-apply').disabled=true;
+  document.getElementById('roster-preview').innerHTML='';
+  toast('명단이 등록·저장되었습니다');
+}
+function resetRoster(){
+  if(!confirm('기본 내장 명단으로 되돌릴까요?')) return;
+  localStorage.removeItem(ROSTER_KEY);
+  rosterMeta={source:'기본 내장 명단', count:DORM_DATA.students.length, when:''};
+  buildRoster(DORM_DATA.students);
+  curTab=0; renderTabs(); render(); renderRosterStatus(); buildSetFields(); toast('기본 내장 명단으로 복귀');
+}
+
+/* ===== 당일 일지 연동 ===== */
+let pendingLink=null;
+function openLink(){
+  pendingLink=null; document.getElementById('link-file').value='';
+  document.getElementById('link-preview').innerHTML='';
+  document.getElementById('link-apply').disabled=true;
+  document.getElementById('link-date-lbl').textContent=curDate;
+  renderLinkStatusBox(); showOv('ov-link');
+}
+function renderLinkStatusBox(){
+  const r=R(); const box=document.getElementById('link-status-box');
+  if(r.logLink){ box.innerHTML=`<div class="hint" style="border-style:solid;border-color:#10b981;color:#047857">
+    ✅ <b>연동됨</b> · ${r.logLink.file}<br>· ${r.logLink.count}명 반영 · ${r.logLink.when}</div>`; }
+  else box.innerHTML=`<div class="hint" style="border-style:solid;border-color:#fdba74;color:#b45309">
+    ⚠️ ${curDate} 일지가 아직 연동되지 않았습니다.</div>`;
+}
+function parseLink(ev){
+  const f=ev.target.files[0]; if(!f) return;
+  if(typeof XLSX==='undefined'){ toast('엑셀 모듈 로딩 실패(인터넷 필요)'); return; }
+  const rd=new FileReader();
+  rd.onload=e=>{
+    try{
+      const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
+      // '귀가' 시트 우선, 없으면 첫 시트
+      const shName = wb.SheetNames.find(n=>/귀가/.test(n)) || wb.SheetNames[0];
+      const rows=XLSX.utils.sheet_to_json(wb.Sheets[shName],{header:1,defval:''});
+      const result={}; let sectionDefault=null;
+      rows.forEach(row=>{
+        const text=row.map(x=>String(x)).join(' ');
+        if(/미입사|퇴사자\s*명단/.test(text)) sectionDefault='미입사';
+        // 행에서 키워드 판정
+        let kw=null;
+        if(/귀가/.test(text)) kw='귀가';
+        else if(/퇴사/.test(text)) kw='퇴사';
+        else if(/미입사|미입소|미입실/.test(text)) kw='미입사';
+        // 행 내 모든 4자리 학번 토큰 중 현재 명단에 있는 것
+        row.forEach(cell=>{
+          const m=String(cell).trim().match(/^(\d{4})$/);
+          if(m && byHak[m[1]]){
+            const status = kw || sectionDefault;
+            if(status) result[m[1]]=status;
+          }
+        });
+      });
+      const cnt=Object.keys(result).length;
+      pendingLink={result, file:f.name, count:cnt};
+      const prev=document.getElementById('link-preview');
+      if(!cnt){ prev.innerHTML='<div class="hint" style="color:#b45309">현재 명단과 매칭되는 귀가·퇴사·미입사 학생이 없습니다. (양식/학년 확인)</div>';
+        document.getElementById('link-apply').disabled=false; return; }
+      const list=Object.entries(result).map(([h,st])=>`${byHak[h].room}호 ${byHak[h].name}(${st})`).join(', ');
+      prev.innerHTML=`<div class="hint" style="border-style:solid;border-color:#10b981;color:#047857">
+        ✅ 매칭 <b>${cnt}</b>명<br>${list}</div>`;
+      document.getElementById('link-apply').disabled=false;
+    }catch(err){ toast('엑셀을 읽을 수 없습니다'); }
+  };
+  rd.readAsArrayBuffer(f);
+}
+function applyLink(){
+  if(!pendingLink) return;
+  const r=R();
+  Object.entries(pendingLink.result).forEach(([h,st])=>r.exclusions[h]=st);
+  r.logLink={file:pendingLink.file, count:pendingLink.count, when:new Date().toLocaleString('ko-KR')};
+  save(); closeOv('ov-link'); render(); renderLinkBar();
+  toast(`당일 일지 연동 완료 (${pendingLink.count}명)`);
+}
+function unlinkLog(){
+  const r=R();
+  if(!r.logLink){ toast('연동된 일지가 없습니다'); return; }
+  if(!confirm('당일 일지 연동을 해제할까요?\n(자동 반영된 귀가/미입사 표시도 함께 해제됩니다. 퇴사는 유지)')) return;
+  // 연동으로 들어온 귀가/미입사만 제거(퇴사는 장기로 보고 유지)
+  Object.keys(r.exclusions).forEach(h=>{ if(r.exclusions[h]==='귀가'||r.exclusions[h]==='미입사') delete r.exclusions[h]; });
+  delete r.logLink; save(); render(); renderLinkBar(); renderLinkStatusBox();
+  toast('연동이 해제되었습니다');
+}
+function renderLinkBar(){
+  const r=R(); const bar=document.getElementById('link-bar');
+  if(r.logLink){ bar.className='link-bar on';
+    bar.innerHTML=`🔗 당일 일지: <b>연동됨</b> · ${r.logLink.file} · ${r.logLink.count}명 제외 반영`; }
+  else { bar.className='link-bar off';
+    bar.innerHTML=`🔗 당일 일지: <b>미연동</b> — 눌러서 ${curDate} 귀가·퇴사·미입사 명단을 연동하세요`; }
+}
+
+
+function showOv(id){ document.getElementById(id).classList.add('show'); }
+function closeOv(id){ document.getElementById(id).classList.remove('show'); }
+function toast(m){ const t=document.getElementById('toast'); t.textContent=m; t.classList.add('show');
+  clearTimeout(t._t); t._t=setTimeout(()=>t.classList.remove('show'),1600); }
+function addDays(d,n){ const dt=new Date(d+'T00:00'); dt.setDate(dt.getDate()+n);
+  return dt.toISOString().slice(0,10); }
+function setupMemoScroll(){
+  const m=document.getElementById('memo');
+  if(m._kbBound) return; m._kbBound=true;
+  const vv=window.visualViewport;
+  function update(){
+    if(!document.body.classList.contains('memo-float')) return;
+    let kb=0;
+    if(vv) kb=Math.max(0, (window.innerHeight - vv.height - vv.offsetTop));
+    document.documentElement.style.setProperty('--kb', kb+'px');
+  }
+  m.addEventListener('focus',()=>{
+    document.body.classList.add('memo-float');
+    update(); setTimeout(update,60); setTimeout(update,250); setTimeout(update,500);
+    if(!vv) setTimeout(()=>m.scrollIntoView({behavior:'smooth',block:'center'}),300);
+  });
+  m.addEventListener('blur',()=>{
+    document.body.classList.remove('memo-float');
+    document.documentElement.style.removeProperty('--kb');
+  });
+  if(vv){ vv.addEventListener('resize',update); vv.addEventListener('scroll',update); }
+}
+
+/* ===== 전체화면 / 한 화면 맞춤 ===== */
+function toggleFull(){
+  if(!document.body.classList.contains('fit')){
+    const el=document.documentElement;
+    const req=el.requestFullscreen||el.webkitRequestFullscreen;
+    if(req){ try{ const p=req.call(el); if(p&&p.catch) p.catch(()=>{}); }catch(e){} }
+    enterFit();
+  }else{
+    if(document.fullscreenElement){ const ex=document.exitFullscreen||document.webkitExitFullscreen;
+      if(ex){ try{ ex.call(document); }catch(e){} } }
+    exitFit();
+  }
+}
+function enterFit(){ document.body.classList.add('fit'); document.getElementById('fs-btn').textContent='⛶ 해제'; fitGrid(); }
+function exitFit(){ document.body.classList.remove('fit'); document.getElementById('fs-btn').textContent='⛶ 전체화면'; document.documentElement.style.removeProperty('--cols'); }
+document.addEventListener('fullscreenchange',()=>{ if(document.fullscreenElement) enterFit(); else exitFit(); });
+document.addEventListener('webkitfullscreenchange',()=>{ if(document.fullscreenElement) enterFit(); else exitFit(); });
+
+/* 한 화면에 모든 호실이 들어가도록 열 수 자동 계산 */
+function fitGrid(){
+  if(!document.body.classList.contains('fit')) return;
+  const grid=document.getElementById('grid'); const floor=document.querySelector('.floor');
+  if(!grid||!floor) return;
+  const n=(FLOORS[DB.tabs[curTab].floor]||[]).length; if(!n) return;
+  const W=floor.clientWidth, H=floor.clientHeight, gap=6;
+  let best=null;
+  for(let cols=1; cols<=10; cols++){
+    const rows=Math.ceil(n/cols);
+    const cw=(W-gap*(cols-1))/cols, ch=(H-gap*(rows-1))/rows;
+    if(cw<118) continue;                 // 너무 좁으면 제외
+    const score=Math.min(cw/150,1)*ch;   // 셀이 충분히 크면서 행 높이 큰 쪽 선호
+    if(ch>=84 && (!best||score>best.score)) best={cols,score};
+  }
+  if(!best){ // 최소 높이 못맞추면 행 높이 최대가 되는 열 수 선택
+    let bc=1,bh=0;
+    for(let cols=1; cols<=10; cols++){ const rows=Math.ceil(n/cols);
+      const cw=(W-gap*(cols-1))/cols; if(cw<108)continue; const ch=(H-gap*(rows-1))/rows; if(ch>bh){bh=ch;bc=cols;} }
+    best={cols:bc};
+  }
+  const cols=best.cols, rows=Math.ceil(n/cols);
+  const cellH=(H-gap*(rows-1))/rows;
+  let maxStu=1; (FLOORS[DB.tabs[curTab].floor]||[]).forEach(no=>maxStu=Math.max(maxStu,(ROOMS[no]||[]).length));
+  const perStu=Math.max(14,(cellH-24-10)/maxStu);     // 학생 1명당 높이
+  let nm=Math.round(perStu*0.5); nm=Math.max(13,Math.min(30,nm));
+  const stugap = perStu>42?5:(perStu>30?4:2);
+  const rno=Math.max(13,Math.min(20,Math.round(cellH*0.13)));
+  const ds=document.documentElement.style;
+  ds.setProperty('--cols', cols);
+  ds.setProperty('--nm', nm+'px');
+  ds.setProperty('--stugap', stugap+'px');
+  ds.setProperty('--rno', rno+'px');
+}
+window.addEventListener('resize', ()=>{ clearTimeout(window._fr); window._fr=setTimeout(fitGrid,120); });
+document.querySelectorAll('.ov').forEach(o=>o.addEventListener('click',e=>{ if(e.target===o) o.classList.remove('show'); }));
+
+init();
+</script>
+</body>
+</html>
