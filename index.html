@@ -194,6 +194,13 @@
   .cal-d.today{box-shadow:inset 0 0 0 2px #fbbf24;}
   .cal-d.cur{background:var(--blue);color:#fff;border-color:var(--blue);}
   .cal-d.cur.has::after{background:#fff;}
+  .ex-결석{background:#e11d48;} .ex-조퇴{background:#f59e0b;}
+  .stu.excluded.ex-bg-귀가{background:#e0f2fe;border-color:#7dd3fc;}
+  .stu.excluded.ex-bg-퇴사{background:#e2e8f0;border-color:#cbd5e1;}
+  .stu.excluded.ex-bg-미입사{background:#f3e8ff;border-color:#d8b4fe;}
+  .stu.excluded.ex-bg-결석{background:#ffe4e6;border-color:#fda4af;}
+  .stu.excluded.ex-bg-조퇴{background:#fef3c7;border-color:#fcd34d;}
+  .tool.linked{background:#dcfce7 !important;color:#166534 !important;box-shadow:inset 0 0 0 2px #22c55e;}
 </style>
 
     <script>
@@ -222,7 +229,7 @@
   </header>
 
   <div class="toolbar">
-    <button class="tool t-home" onclick="openExcl()">🚪 귀가·퇴사</button>
+    <button class="tool t-home" id="link-tool-btn" onclick="openLink()">🔗 당일 일지 연동</button>
     <button class="tool t-merit" onclick="openMerit()">🏅 상점 집계</button>
     <button class="tool t-sum" onclick="openSummary()">📊 오늘 집계</button>
     <button class="tool t-set" onclick="openData()">⚙️ 설정·데이터</button>
@@ -271,34 +278,7 @@
   </div>
 </div>
 
-<!-- 귀가/퇴사 관리 -->
-<div class="ov" id="ov-excl">
-  <div class="modal">
-    <div class="m-head"><h3>🚪 귀가·퇴사·미입사 관리</h3><button class="x" onclick="closeOv('ov-excl')">✕</button></div>
-    <div class="m-body">
-      <div class="m-sub">체크 제외 대상은 호실에서 음영 처리되고, 전체 벌점 입력 시에도 제외됩니다.</div>
-      <div class="field">
-        <label>① 명단 붙여넣기 자동 등록 (학번·이름·구분 포함 텍스트)</label>
-        <textarea class="paste" id="excl-paste" placeholder="예)
-2409 김성훈 귀가
-2219 정성우 명령퇴사
-김민재 미입사"></textarea>
-      </div>
-      <button class="btn btn-p" style="margin-bottom:6px" onclick="applyPaste()">붙여넣은 명단 자동 반영</button>
-      <div class="hint">‘귀가’·‘퇴사/명령퇴사’·‘미입사’ 키워드를 자동 인식합니다. 학번 또는 이름으로 매칭됩니다.</div>
-      <div class="sec-t">② 현재 제외 대상 (개별 수정/해제)</div>
-      <div class="field">
-        <input type="text" id="excl-search" placeholder="🔍 이름/학번으로 학생 검색해 추가" oninput="renderExclSearch()">
-      </div>
-      <div id="excl-search-list"></div>
-      <div id="excl-current"></div>
-    </div>
-    <div class="m-foot">
-      <button class="btn btn-r" onclick="clearAllExcl()">전체 해제</button>
-      <button class="btn btn-p" onclick="closeOv('ov-excl');render()">완료</button>
-    </div>
-  </div>
-</div>
+
 
 <!-- 상점 순위 집계 -->
 <div class="ov" id="ov-merit">
@@ -384,14 +364,14 @@
   <div class="modal">
     <div class="m-head"><h3>🔗 당일 일지 연동</h3><button class="x" onclick="closeOv('ov-link')">✕</button></div>
     <div class="m-body">
-      <div class="m-sub">‘귀가외출교내활동’ 엑셀을 연동하면 <b id="link-date-lbl"></b>의 귀가·퇴사·미입사 학생이 자동으로 체크 대상에서 제외됩니다.</div>
+      <div class="m-sub">‘기숙사 일지’의 <b>기숙사입실현황</b> 시트를 연동하면 <b id="link-date-lbl"></b>의 미입사·퇴사·귀가·결석 학생이 자동으로 체크 대상에서 제외되고 색깔로 구분 표시됩니다.</div>
       <div id="link-status-box"></div>
       <div class="field" style="margin-top:10px">
-        <label>① 귀가외출교내활동 엑셀 선택 (.xlsx)</label>
+        <label>① 기숙사 일지 엑셀 선택 (.xlsx) — ‘기숙사입실현황’ 시트</label>
         <input type="file" id="link-file" accept=".xlsx,.xls" onchange="parseLink(event)">
       </div>
       <div id="link-preview"></div>
-      <div class="hint">‘귀가’ 시트의 일일 귀가/명령퇴사 명단과 미입사/퇴사자 명단을 자동 인식해 현재 명단과 매칭합니다.<br>연동 후에도 ‘귀가·퇴사 관리’에서 개별 수정/추가가 가능합니다.</div>
+      <div class="hint">‘미입사자·퇴사자’ 구역과 ‘귀가자’ 구역을 자동 인식해, 학번·이름이 일치하는 현재 명단 학생을 상태별 색으로 표시합니다.</div>
     </div>
     <div class="m-foot">
       <button class="btn btn-r" onclick="unlinkLog()">연동 해제</button>
@@ -574,7 +554,7 @@ function render(){
       const st=r.exclusions[s.hak];
       const div=document.createElement('div');
       if(st){
-        div.className='stu excluded';
+        div.className='stu excluded ex-bg-'+st;
         div.innerHTML=`<span class="gdot g${s.grade}"></span><span class="hk">${s.hak}</span><span class="nm">${s.name}</span>
           <span class="ex-tag ex-${st}">${st}</span>`;
       }else{
@@ -683,57 +663,6 @@ function saveRoom(){
   save(); closeOv('ov-room'); render(); toast('저장되었습니다');
 }
 function clearRoom(){ roomSel={}; meritSel=""; openRoom(roomTarget); }
-
-/* ===== 귀가/퇴사 관리 ===== */
-function openExcl(){ document.getElementById('excl-paste').value=''; document.getElementById('excl-search').value='';
-  document.getElementById('excl-search-list').innerHTML=''; renderExclCurrent(); showOv('ov-excl'); }
-function applyPaste(){
-  const txt=document.getElementById('excl-paste').value; const r=R(); let cnt=0;
-  txt.split(/\n+/).forEach(line=>{
-    line=line.trim(); if(!line) return;
-    let status="미입사";
-    if(/귀가/.test(line)) status="귀가";
-    else if(/퇴사/.test(line)) status="퇴사";
-    else if(/미입사|미입소|미입실/.test(line)) status="미입사";
-    const hakM=line.match(/\b(\d{4})\b/);
-    let target=null;
-    if(hakM && byHak[hakM[1]]) target=hakM[1];
-    if(!target){ // 이름 매칭
-      const cand=STUDENTS.filter(s=>line.includes(s.name));
-      if(cand.length===1) target=cand[0].hak;
-    }
-    if(target){ r.exclusions[target]=status; cnt++; }
-  });
-  save(); document.getElementById('excl-paste').value=''; renderExclCurrent(); render();
-  toast(cnt?`${cnt}명 반영됨`:'매칭된 학생이 없습니다');
-}
-function renderExclSearch(){
-  const q=document.getElementById('excl-search').value.trim(); const list=document.getElementById('excl-search-list');
-  if(!q){ list.innerHTML=''; return; }
-  const r=R();
-  const res=STUDENTS.filter(s=>(s.name.includes(q)||s.hak.includes(q))&&!r.exclusions[s.hak]).slice(0,8);
-  list.innerHTML=res.map(s=>`<div class="ex-item"><span class="enm">${s.room}호 ${s.name} (${s.hak})</span>
-    <button class="btn btn-g" style="flex:0;padding:6px 10px;font-size:12px" onclick="addExcl('${s.hak}')">추가</button></div>`).join('')
-    || '<div class="hint">일치하는 학생이 없습니다.</div>';
-}
-function addExcl(hak){ R().exclusions[hak]="귀가"; save(); document.getElementById('excl-search').value='';
-  document.getElementById('excl-search-list').innerHTML=''; renderExclCurrent(); }
-function renderExclCurrent(){
-  const r=R(); const box=document.getElementById('excl-current');
-  const ents=Object.keys(r.exclusions).filter(h=>byHak[h]).sort((a,b)=>byHak[a].room-byHak[b].room);
-  if(!ents.length){ box.innerHTML='<div class="hint">현재 제외 대상이 없습니다.</div>'; return; }
-  box.innerHTML=ents.map(h=>{ const s=byHak[h]; const st=r.exclusions[h];
-    return `<div class="ex-item"><span class="enm">${s.room}호 ${s.name} (${s.hak})</span>
-      <select onchange="setExcl('${h}',this.value)">
-        ${["귀가","퇴사","미입사"].map(o=>`<option ${o===st?'selected':''}>${o}</option>`).join('')}
-      </select>
-      <button class="btn btn-r" style="flex:0;padding:6px 9px;font-size:12px" onclick="rmExcl('${h}')">해제</button></div>`;
-  }).join('');
-}
-function setExcl(h,v){ R().exclusions[h]=v; save(); }
-function rmExcl(h){ delete R().exclusions[h]; save(); renderExclCurrent(); render(); }
-function clearAllExcl(){ if(!confirm('현재 날짜의 제외 대상을 모두 해제할까요?'))return;
-  R().exclusions={}; save(); renderExclCurrent(); render(); }
 
 /* ===== 상점 순위 집계 ===== */
 function openMerit(){
@@ -1009,40 +938,56 @@ function parseLink(ev){
   rd.onload=e=>{
     try{
       const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
-      // '귀가' 시트 우선, 없으면 첫 시트
-      const shName = wb.SheetNames.find(n=>/귀가/.test(n)) || wb.SheetNames[0];
+      // [v1.1] 기숙사 일지의 '기숙사입실현황' 시트만 연동
+      const shName = wb.SheetNames.find(n=>/기숙사입실현황|입실현황/.test(n));
+      if(!shName){
+        document.getElementById('link-preview').innerHTML='<div class="hint" style="color:#b45309">‘기숙사입실현황’ 시트가 없습니다. 기숙사 일지 엑셀을 선택해주세요.</div>';
+        document.getElementById('link-apply').disabled=true; pendingLink=null; return;
+      }
       const rows=XLSX.utils.sheet_to_json(wb.Sheets[shName],{header:1,defval:''});
-      const result={}; let sectionDefault=null;
+      // 이름 정규화(공백/끝 영문 제거) — 학번+이름으로 본인 확인
+      const norm=s=>String(s||'').replace(/\s/g,'').replace(/[A-Za-z]+$/,'');
+      const result={}; let section=null; let mismatch=0;
       rows.forEach(row=>{
-        const text=row.map(x=>String(x)).join(' ');
-        if(/미입사|퇴사자\s*명단/.test(text)) sectionDefault='미입사';
-        // 행에서 키워드 판정
+        const cells=row.map(x=>String(x).trim());
+        const text=cells.join(' ');
+        // (학번, 바로 옆=이름) 쌍 — 현재 명단에 있는 4자리 학번만
+        const pairs=[];
+        cells.forEach((c,i)=>{ if(/^\d{4}$/.test(c)&&byHak[c]) pairs.push([c, cells[i+1]||'']); });
+        // 구역 헤더(학번 없는 줄): 미입사자/퇴사자 vs 귀가자
+        if(pairs.length===0){
+          if(/미입사자|퇴사자/.test(text)) section='leave';
+          else if(/귀가자/.test(text)) section='home';
+        }
+        // 행 내 사유 키워드(우선) — 없으면 구역 기본값('귀자' 같은 오타도 귀가 구역이면 귀가)
         let kw=null;
-        if(/귀가/.test(text)) kw='귀가';
-        else if(/퇴사/.test(text)) kw='퇴사';
+        if(/명령퇴사|자진퇴사|퇴사/.test(text)) kw='퇴사';
         else if(/미입사|미입소|미입실/.test(text)) kw='미입사';
-        // 행 내 모든 4자리 학번 토큰 중 현재 명단에 있는 것
-        row.forEach(cell=>{
-          const m=String(cell).trim().match(/^(\d{4})$/);
-          if(m && byHak[m[1]]){
-            const status = kw || sectionDefault;
-            if(status) result[m[1]]=status;
-          }
+        else if(/귀가/.test(text)) kw='귀가';
+        else if(/결석|조퇴/.test(text)) kw='결석';
+        pairs.forEach(([h,nm])=>{
+          let st = kw || (section==='home'?'귀가':(section==='leave'?'미입사':null));
+          if(!st) return;
+          if(nm && norm(nm)!==norm(byHak[h].name)){ mismatch++; return; }
+          result[h]=st;
         });
       });
       const cnt=Object.keys(result).length;
       pendingLink={result, file:f.name, count:cnt};
       const prev=document.getElementById('link-preview');
-      if(!cnt){ prev.innerHTML='<div class="hint" style="color:#b45309">현재 명단과 매칭되는 귀가·퇴사·미입사 학생이 없습니다. (양식/학년 확인)</div>';
+      if(!cnt){ prev.innerHTML=`<div class="hint" style="color:#b45309">기숙사입실현황에서 매칭되는 미입사·퇴사·귀가·결석 학생이 없습니다.${mismatch?` (학번은 있으나 이름 불일치 ${mismatch}건)`:''}</div>`;
         document.getElementById('link-apply').disabled=false; return; }
-      const list=Object.entries(result).map(([h,st])=>`${byHak[h].room}호 ${byHak[h].name}(${st})`).join(', ');
+      const order={미입사:0,퇴사:1,귀가:2,결석:3,조퇴:4};
+      const list=Object.entries(result).sort((a,b)=>(order[a[1]]??9)-(order[b[1]]??9))
+        .map(([h,st])=>`<span style="white-space:nowrap;margin-right:8px;display:inline-block"><b style="color:${stColor(st)}">●</b> ${byHak[h].room}호 ${byHak[h].name}(${st})</span>`).join('');
       prev.innerHTML=`<div class="hint" style="border-style:solid;border-color:#10b981;color:#047857">
-        ✅ 매칭 <b>${cnt}</b>명<br>${list}</div>`;
+        ✅ 매칭 <b>${cnt}</b>명${mismatch?` · 이름 불일치 ${mismatch}건 제외`:''}<br>${list}</div>`;
       document.getElementById('link-apply').disabled=false;
     }catch(err){ toast('엑셀을 읽을 수 없습니다'); }
   };
   rd.readAsArrayBuffer(f);
 }
+function stColor(st){ return st==='귀가'?'#0ea5e9':st==='퇴사'?'#64748b':st==='미입사'?'#a855f7':st==='결석'?'#e11d48':st==='조퇴'?'#f59e0b':'#64748b'; }
 function applyLink(){
   if(!pendingLink) return;
   const r=R();
@@ -1056,16 +1001,19 @@ function unlinkLog(){
   if(!r.logLink){ toast('연동된 일지가 없습니다'); return; }
   if(!confirm('당일 일지 연동을 해제할까요?\n(자동 반영된 귀가/미입사 표시도 함께 해제됩니다. 퇴사는 유지)')) return;
   // 연동으로 들어온 귀가/미입사만 제거(퇴사는 장기로 보고 유지)
-  Object.keys(r.exclusions).forEach(h=>{ if(r.exclusions[h]==='귀가'||r.exclusions[h]==='미입사') delete r.exclusions[h]; });
+  Object.keys(r.exclusions).forEach(h=>{ if(['귀가','미입사','결석','조퇴'].includes(r.exclusions[h])) delete r.exclusions[h]; });
   delete r.logLink; save(); render(); renderLinkBar(); renderLinkStatusBox();
   toast('연동이 해제되었습니다');
 }
 function renderLinkBar(){
   const r=R(); const bar=document.getElementById('link-bar');
+  const btn=document.getElementById('link-tool-btn');
   if(r.logLink){ bar.className='link-bar on';
-    bar.innerHTML=`🔗 당일 일지: <b>연동됨</b> · ${r.logLink.file} · ${r.logLink.count}명 제외 반영`; }
+    bar.innerHTML=`🔗 당일 일지: <b>연동됨</b> · ${r.logLink.file} · ${r.logLink.count}명 제외 반영`;
+    if(btn){ btn.classList.add('linked'); btn.innerHTML='✅ 일지 연동완료'; } }
   else { bar.className='link-bar off';
-    bar.innerHTML=`🔗 당일 일지: <b>미연동</b> — 눌러서 ${curDate} 귀가·퇴사·미입사 명단을 연동하세요`; }
+    bar.innerHTML=`🔗 당일 일지: <b>미연동</b> — 눌러서 ${curDate} 미입사·퇴사·귀가 명단을 연동하세요`;
+    if(btn){ btn.classList.remove('linked'); btn.innerHTML='🔗 당일 일지 연동'; } }
 }
 
 
