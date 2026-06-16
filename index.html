@@ -14,6 +14,7 @@
     <link rel="icon" type="image/png" sizes="192x192" href="icons/icon-192.png">
     <link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png">
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
+<script src="https://accounts.google.com/gsi/client" async defer></script>
 <style>
   :root{
     --bg:#eef2f7; --card:#ffffff; --ink:#1f2d3d; --sub:#64748b;
@@ -194,13 +195,10 @@
   .cal-d.today{box-shadow:inset 0 0 0 2px #fbbf24;}
   .cal-d.cur{background:var(--blue);color:#fff;border-color:var(--blue);}
   .cal-d.cur.has::after{background:#fff;}
-  .ex-결석{background:#e11d48;} .ex-조퇴{background:#f59e0b;}
-  .stu.excluded.ex-bg-귀가{background:#e0f2fe;border-color:#7dd3fc;}
-  .stu.excluded.ex-bg-퇴사{background:#e2e8f0;border-color:#cbd5e1;}
-  .stu.excluded.ex-bg-미입사{background:#f3e8ff;border-color:#d8b4fe;}
-  .stu.excluded.ex-bg-결석{background:#ffe4e6;border-color:#fda4af;}
-  .stu.excluded.ex-bg-조퇴{background:#fef3c7;border-color:#fcd34d;}
-  .tool.linked{background:#dcfce7 !important;color:#166534 !important;box-shadow:inset 0 0 0 2px #22c55e;}
+  .gd-toggle{display:flex;align-items:center;gap:8px;margin-top:8px;padding:9px;border:1px dashed var(--line);border-radius:9px;cursor:pointer;font-size:13px;font-weight:700;color:var(--slate);}
+  .gd-toggle small{display:block;font-weight:400;color:var(--sub);font-size:11px;margin-top:2px;}
+  .gd-row{display:flex;align-items:center;gap:8px;margin:8px 0;font-size:14px;font-weight:700;}
+  #gd-status{line-height:1.7;font-size:12.5px;}
 </style>
 
     <script>
@@ -229,7 +227,7 @@
   </header>
 
   <div class="toolbar">
-    <button class="tool t-home" id="link-tool-btn" onclick="openLink()">🔗 당일 일지 연동</button>
+    <button class="tool t-home" onclick="openExcl()">🚪 귀가·퇴사</button>
     <button class="tool t-merit" onclick="openMerit()">🏅 상점 집계</button>
     <button class="tool t-sum" onclick="openSummary()">📊 오늘 집계</button>
     <button class="tool t-set" onclick="openData()">⚙️ 설정·데이터</button>
@@ -278,7 +276,34 @@
   </div>
 </div>
 
-
+<!-- 귀가/퇴사 관리 -->
+<div class="ov" id="ov-excl">
+  <div class="modal">
+    <div class="m-head"><h3>🚪 귀가·퇴사·미입사 관리</h3><button class="x" onclick="closeOv('ov-excl')">✕</button></div>
+    <div class="m-body">
+      <div class="m-sub">체크 제외 대상은 호실에서 음영 처리되고, 전체 벌점 입력 시에도 제외됩니다.</div>
+      <div class="field">
+        <label>① 명단 붙여넣기 자동 등록 (학번·이름·구분 포함 텍스트)</label>
+        <textarea class="paste" id="excl-paste" placeholder="예)
+2409 김성훈 귀가
+2219 정성우 명령퇴사
+김민재 미입사"></textarea>
+      </div>
+      <button class="btn btn-p" style="margin-bottom:6px" onclick="applyPaste()">붙여넣은 명단 자동 반영</button>
+      <div class="hint">‘귀가’·‘퇴사/명령퇴사’·‘미입사’ 키워드를 자동 인식합니다. 학번 또는 이름으로 매칭됩니다.</div>
+      <div class="sec-t">② 현재 제외 대상 (개별 수정/해제)</div>
+      <div class="field">
+        <input type="text" id="excl-search" placeholder="🔍 이름/학번으로 학생 검색해 추가" oninput="renderExclSearch()">
+      </div>
+      <div id="excl-search-list"></div>
+      <div id="excl-current"></div>
+    </div>
+    <div class="m-foot">
+      <button class="btn btn-r" onclick="clearAllExcl()">전체 해제</button>
+      <button class="btn btn-p" onclick="closeOv('ov-excl');render()">완료</button>
+    </div>
+  </div>
+</div>
 
 <!-- 상점 순위 집계 -->
 <div class="ov" id="ov-merit">
@@ -348,6 +373,30 @@
       </div>
       <button class="btn btn-g" style="margin-top:8px" onclick="closeOv('ov-data');openCalendar(false)">🗓️ 기록 달력 보기</button>
 
+      <div class="sec-t">☁️ 구글 드라이브 자동 백업</div>
+      <div class="m-sub" id="gd-status"></div>
+      <button class="btn btn-g" style="margin-top:6px" onclick="driveBackupNow(true)">☁️ 지금 드라이브로 백업</button>
+      <div class="gd-toggle" onclick="toggleDriveSettings()">
+        <span id="gd-setting-ico">⚙️</span>
+        <span id="gd-setting-lbl">드라이브 연결 설정 열기<small>클라이언트 ID · 구글 연결 · 자동 백업</small></span>
+      </div>
+      <div id="gd-settings-panel" style="display:none">
+        <div class="field" style="margin-top:8px"><label>OAuth 클라이언트 ID</label>
+          <input id="gd-clientid" placeholder="xxxxx.apps.googleusercontent.com" oninput="saveDriveClientId()"></div>
+        <button class="btn btn-p" onclick="driveConnect()">🔗 구글 연결(인증)</button>
+        <label class="gd-row"><input type="checkbox" id="gd-auto" onchange="toggleDriveAuto()" style="width:auto"> 앱 켤 때 자동 백업</label>
+        <div class="field"><label>날짜별 백업 보관 일수</label>
+          <input type="number" id="gd-keepdays" min="1" value="30" onchange="saveDriveKeepDays()"></div>
+        <div class="hint">관리일지와 <b>같은 Cloud 프로젝트의 클라이언트 ID</b>를 입력하세요. 프로그램 제목 + "_백업" 폴더에 <b>최신.json</b>과 날짜별 파일이 저장되고, 보관 일수가 지난 날짜 파일은 자동 정리됩니다.</div>
+      </div>
+
+      <div class="sec-t">📊 엑셀로 내보내기 (보고용)</div>
+      <div style="display:flex;gap:8px">
+        <div class="field" style="flex:1;margin:0"><label>시작일</label><input type="date" id="exp-from"></div>
+        <div class="field" style="flex:1;margin:0"><label>종료일</label><input type="date" id="exp-to"></div>
+      </div>
+      <button class="btn btn-p" style="margin-top:6px" onclick="exportXlsx()">📊 엑셀(.xlsx) 내보내기</button>
+
       <div class="sec-t">🏢 담당 층 · 탭 설정</div>
       <div class="m-sub">담당하는 2개 층을 고르고 탭 이름을 정하세요.</div>
       <div id="set-fields"></div>
@@ -364,14 +413,14 @@
   <div class="modal">
     <div class="m-head"><h3>🔗 당일 일지 연동</h3><button class="x" onclick="closeOv('ov-link')">✕</button></div>
     <div class="m-body">
-      <div class="m-sub">‘기숙사 일지’의 <b>기숙사입실현황</b> 시트를 연동하면 <b id="link-date-lbl"></b>의 미입사·퇴사·귀가·결석 학생이 자동으로 체크 대상에서 제외되고 색깔로 구분 표시됩니다.</div>
+      <div class="m-sub">‘귀가외출교내활동’ 엑셀을 연동하면 <b id="link-date-lbl"></b>의 귀가·퇴사·미입사 학생이 자동으로 체크 대상에서 제외됩니다.</div>
       <div id="link-status-box"></div>
       <div class="field" style="margin-top:10px">
-        <label>① 기숙사 일지 엑셀 선택 (.xlsx) — ‘기숙사입실현황’ 시트</label>
+        <label>귀가외출교내활동 또는 기숙사일지 엑셀 선택 (.xlsx)</label>
         <input type="file" id="link-file" accept=".xlsx,.xls" onchange="parseLink(event)">
       </div>
       <div id="link-preview"></div>
-      <div class="hint">‘미입사자·퇴사자’ 구역과 ‘귀가자’ 구역을 자동 인식해, 학번·이름이 일치하는 현재 명단 학생을 상태별 색으로 표시합니다.</div>
+      <div class="hint">‘귀가’ 시트의 일일 귀가/명령퇴사 명단과 미입사/퇴사자 명단을 자동 인식해 현재 명단과 매칭합니다.<br>연동 후에도 ‘귀가·퇴사 관리’에서 개별 수정/추가가 가능합니다.</div>
     </div>
     <div class="m-foot">
       <button class="btn btn-r" onclick="unlinkLog()">연동 해제</button>
@@ -554,7 +603,7 @@ function render(){
       const st=r.exclusions[s.hak];
       const div=document.createElement('div');
       if(st){
-        div.className='stu excluded ex-bg-'+st;
+        div.className='stu excluded';
         div.innerHTML=`<span class="gdot g${s.grade}"></span><span class="hk">${s.hak}</span><span class="nm">${s.name}</span>
           <span class="ex-tag ex-${st}">${st}</span>`;
       }else{
@@ -664,6 +713,57 @@ function saveRoom(){
 }
 function clearRoom(){ roomSel={}; meritSel=""; openRoom(roomTarget); }
 
+/* ===== 귀가/퇴사 관리 ===== */
+function openExcl(){ document.getElementById('excl-paste').value=''; document.getElementById('excl-search').value='';
+  document.getElementById('excl-search-list').innerHTML=''; renderExclCurrent(); showOv('ov-excl'); }
+function applyPaste(){
+  const txt=document.getElementById('excl-paste').value; const r=R(); let cnt=0;
+  txt.split(/\n+/).forEach(line=>{
+    line=line.trim(); if(!line) return;
+    let status="미입사";
+    if(/귀가/.test(line)) status="귀가";
+    else if(/퇴사/.test(line)) status="퇴사";
+    else if(/미입사|미입소|미입실/.test(line)) status="미입사";
+    const hakM=line.match(/\b(\d{4})\b/);
+    let target=null;
+    if(hakM && byHak[hakM[1]]) target=hakM[1];
+    if(!target){ // 이름 매칭
+      const cand=STUDENTS.filter(s=>line.includes(s.name));
+      if(cand.length===1) target=cand[0].hak;
+    }
+    if(target){ r.exclusions[target]=status; cnt++; }
+  });
+  save(); document.getElementById('excl-paste').value=''; renderExclCurrent(); render();
+  toast(cnt?`${cnt}명 반영됨`:'매칭된 학생이 없습니다');
+}
+function renderExclSearch(){
+  const q=document.getElementById('excl-search').value.trim(); const list=document.getElementById('excl-search-list');
+  if(!q){ list.innerHTML=''; return; }
+  const r=R();
+  const res=STUDENTS.filter(s=>(s.name.includes(q)||s.hak.includes(q))&&!r.exclusions[s.hak]).slice(0,8);
+  list.innerHTML=res.map(s=>`<div class="ex-item"><span class="enm">${s.room}호 ${s.name} (${s.hak})</span>
+    <button class="btn btn-g" style="flex:0;padding:6px 10px;font-size:12px" onclick="addExcl('${s.hak}')">추가</button></div>`).join('')
+    || '<div class="hint">일치하는 학생이 없습니다.</div>';
+}
+function addExcl(hak){ R().exclusions[hak]="귀가"; save(); document.getElementById('excl-search').value='';
+  document.getElementById('excl-search-list').innerHTML=''; renderExclCurrent(); }
+function renderExclCurrent(){
+  const r=R(); const box=document.getElementById('excl-current');
+  const ents=Object.keys(r.exclusions).filter(h=>byHak[h]).sort((a,b)=>byHak[a].room-byHak[b].room);
+  if(!ents.length){ box.innerHTML='<div class="hint">현재 제외 대상이 없습니다.</div>'; return; }
+  box.innerHTML=ents.map(h=>{ const s=byHak[h]; const st=r.exclusions[h];
+    return `<div class="ex-item"><span class="enm">${s.room}호 ${s.name} (${s.hak})</span>
+      <select onchange="setExcl('${h}',this.value)">
+        ${["귀가","퇴사","미입사"].map(o=>`<option ${o===st?'selected':''}>${o}</option>`).join('')}
+      </select>
+      <button class="btn btn-r" style="flex:0;padding:6px 9px;font-size:12px" onclick="rmExcl('${h}')">해제</button></div>`;
+  }).join('');
+}
+function setExcl(h,v){ R().exclusions[h]=v; save(); }
+function rmExcl(h){ delete R().exclusions[h]; save(); renderExclCurrent(); render(); }
+function clearAllExcl(){ if(!confirm('현재 날짜의 제외 대상을 모두 해제할까요?'))return;
+  R().exclusions={}; save(); renderExclCurrent(); render(); }
+
 /* ===== 상점 순위 집계 ===== */
 function openMerit(){
   const to=curDate; const from=addDays(curDate,-13);
@@ -721,31 +821,48 @@ function rmMeritLog(i){ DB.meritLog.splice(i,1); save(); renderMeritLog(); }
 
 /* ===== 오늘 집계 ===== */
 function openSummary(){
-  const r=R(); let out=`■ ${DB.progTitle}\n■ 체크일: ${curDate}\n\n`;
-  Object.keys(FLOORS).sort().forEach(fl=>{
-    const rooms=FLOORS[fl]; if(!rooms) return;
-    let block=''; 
-    rooms.forEach(no=>{
-      const rd=r.room[no]||{}; const rdem=Object.keys(rd.demerits||{}).filter(k=>rd.demerits[k]);
-      const lines=[];
-      if(rdem.length) lines.push(`   · [호실벌점] ${rdem.join(', ')}`);
-      if(rd.merit) lines.push(`   · [정리우수] ${rd.merit}`);
-      ROOMS[no].forEach(s=>{
-        if(r.exclusions[s.hak]){ lines.push(`   · ${s.hak} ${s.name}: (${r.exclusions[s.hak]})`); return; }
-        const ind=r.individual[s.hak]||{}; const ks=Object.keys(ind).filter(k=>ind[k]);
-        if(ks.length) lines.push(`   · ${s.hak} ${s.name}: ${ks.join(', ')}`);
-      });
-      if(lines.length) block+=`${no}호\n${lines.join('\n')}\n`;
-    });
-    if(block) out+=`【${fl}층】\n${block}\n`;
+  const r=R();
+  const byHakAsc=(a,b)=>String(a).localeCompare(String(b),undefined,{numeric:true});
+  let out=`■ ${DB.progTitle}\n■ 체크일: ${curDate}\n`;
+
+  // 1) 호실 전체 벌점 : 호실 + 항목 + 대상 학생(학번 이름), 부재자(귀가·퇴사·미입사) 제외
+  const roomBlocks=[];
+  Object.keys(ROOMS).sort((a,b)=>+a-+b).forEach(no=>{
+    const rd=r.room[no]||{}; const dem=Object.keys(rd.demerits||{}).filter(k=>rd.demerits[k]);
+    if(!dem.length) return;
+    const studs=(ROOMS[no]||[]).filter(s=>!r.exclusions[s.hak])
+      .sort((a,b)=>byHakAsc(a.hak,b.hak)).map(s=>`${s.hak} ${s.name}`);
+    roomBlocks.push(`${no}호 [${dem.join(', ')}]\n   대상: ${studs.length?studs.join(', '):'(재실 인원 없음)'}`);
   });
-  // 합계
-  let ti=0,tr=0,tm=0;
-  Object.values(r.individual).forEach(v=>{if(Object.values(v).some(x=>x))ti++;});
-  Object.values(r.room).forEach(v=>{if(Object.values(v.demerits||{}).some(x=>x))tr++; if(v.merit)tm++;});
-  out+=`────────────\n개인벌점 대상 ${ti}명 · 호실벌점 ${tr}실 · 정리우수 ${tm}실`;
-  if(r.memo) out+=`\n\n[메모]\n${r.memo}`;
-  document.getElementById('sum-text').textContent=out;
+
+  // 2) 개인 벌점 : 벌점 항목별 그룹, 각 그룹 내 학번 오름차순 (호실 미표시)
+  const byItem={}; let indivCount=0;
+  Object.keys(r.individual).forEach(hak=>{
+    const s=byHak[hak]; if(!s) return;
+    const ks=Object.keys(r.individual[hak]).filter(k=>r.individual[hak][k]);
+    if(ks.length) indivCount++;
+    ks.forEach(it=>{ (byItem[it]=byItem[it]||[]).push({hak,name:s.name}); });
+  });
+
+  out+=`\n── 호실 전체 벌점 (${roomBlocks.length}실) ──\n`;
+  out+= roomBlocks.length ? roomBlocks.join('\n')+'\n' : '없음\n';
+
+  out+=`\n── 개인 벌점 (${indivCount}명) ──\n`;
+  const items=Object.keys(byItem);
+  if(!items.length){ out+='없음\n'; }
+  else{
+    const order=(typeof INDIV_ITEMS!=='undefined')?INDIV_ITEMS.slice():[];
+    items.sort((a,b)=>{ let ia=order.indexOf(a), ib=order.indexOf(b);
+      if(ia===-1)ia=999; if(ib===-1)ib=999; return ia-ib || a.localeCompare(b); });
+    items.forEach(it=>{
+      const list=byItem[it].sort((a,b)=>byHakAsc(a.hak,b.hak));
+      out+=`[${it}] (${list.length}명)\n`;
+      list.forEach(p=>{ out+=`   ${p.hak} ${p.name}\n`; });
+    });
+  }
+
+  if(r.memo && r.memo.trim()) out+=`\n[메모]\n${r.memo.trim()}\n`;
+  document.getElementById('sum-text').textContent=out.trim();
   showOv('ov-sum');
 }
 function copySummary(){ const t=document.getElementById('sum-text').textContent;
@@ -754,28 +871,206 @@ function fallbackCopy(t){ const ta=document.createElement('textarea'); ta.value=
   ta.select(); try{document.execCommand('copy');toast('복사되었습니다');}catch(e){} ta.remove(); }
 
 /* ===== 백업 / 복원 ===== */
+function nowStamp(){ const d=new Date(); const p=n=>String(n).padStart(2,'0');
+  return d.getFullYear()+p(d.getMonth()+1)+p(d.getDate())+'_'+p(d.getHours())+p(d.getMinutes()); }
+function esc(s){ return String(s==null?'':s).replace(/[&<>"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;'}[c])); }
+
+/* 백업 페이로드: 명단 + 전체 기록 */
+function buildBackupPayload(){
+  return {_app:"dormCheckout",_ver:2,exportedAt:new Date().toISOString(),
+    roster:{students:STUDENTS,meta:rosterMeta}, data:DB};
+}
 function doBackup(){
-  const blob=new Blob([JSON.stringify(DB,null,2)],{type:'application/json'});
+  const payload=buildBackupPayload();
+  const blob=new Blob([JSON.stringify(payload)],{type:'application/json'});
   const a=document.createElement('a'); a.href=URL.createObjectURL(blob);
-  a.download=`기숙사체크아웃_전체백업_${todayStr().replace(/-/g,'')}.json`; a.click(); URL.revokeObjectURL(a.href);
+  a.download=`${(DB.progTitle||'기숙사퇴실체크아웃')}_백업_${nowStamp()}.json`; a.click(); URL.revokeObjectURL(a.href);
   const n=Object.keys(DB.records||{}).length;
-  toast(`전체 백업 완료 (기록 ${n}일분, 파일 1개)`);
+  toast(`전체 백업 완료 (학생 ${STUDENTS.length} · 기록 ${n}일분)`);
 }
 function doRestore(ev){
   const f=ev.target.files[0]; if(!f)return;
   const rd=new FileReader();
-  rd.onload=e=>{ try{ const d=JSON.parse(e.target.result);
-      if(!d.records){ toast('올바른 백업 파일이 아닙니다'); return; }
-      const n=Object.keys(d.records).length;
-      if(!confirm(`이 백업 파일로 복원할까요? (기록 ${n}일분)\n현재 기기의 입력 내용은 파일 내용으로 대체됩니다.`)) return;
-      DB=d; if(!DB.meritLog)DB.meritLog=[]; if(!DB.tabs)DB.tabs=[{floor:"2",title:"2층"},{floor:"3",title:"3층"}];
+  rd.onload=e=>{ try{
+      const d=JSON.parse(e.target.result);
+      const data = d.data || d;                 // 신규(payload) · 구버전(DB 직접) 모두 지원
+      if(!data || !data.records){ toast('올바른 백업 파일이 아닙니다'); ev.target.value=''; return; }
+      const n=Object.keys(data.records).length;
+      if(!confirm(`이 백업으로 복원할까요? (기록 ${n}일분)\n현재 기기의 입력 내용은 대체됩니다.`)){ ev.target.value=''; return; }
+      DB=data;
+      if(!DB.meritLog)DB.meritLog=[];
+      if(!DB.tabs||!DB.tabs.length){ const fls=Object.keys(FLOORS).sort();
+        DB.tabs=[{floor:fls[0]||'2',title:(fls[0]||'2')+'층'},{floor:fls[1]||fls[0]||'3',title:(fls[1]||fls[0]||'3')+'층'}]; }
       if(!DB.lastAutoClear)DB.lastAutoClear='';
+      if(d.roster && d.roster.students && d.roster.students.length){
+        rosterMeta=d.roster.meta||rosterMeta; buildRoster(d.roster.students);
+        localStorage.setItem(ROSTER_KEY, JSON.stringify({students:STUDENTS,meta:rosterMeta}));
+      }
       curDate=todayStr(); autoFollow=true; closeOv('ov-data');
       save(); init();
       toast(`복원 완료 (${n}일분) — 달력에서 날짜를 선택하세요`);
-      openCalendar(true);          // 복원 후 달력 팝업으로 날짜 선택
-    }catch(err){ toast('파일을 읽을 수 없습니다'); } };
+      openCalendar(true);
+    }catch(err){ toast('파일을 읽을 수 없습니다'); ev.target.value=''; } };
   rd.readAsText(f); ev.target.value='';
+}
+
+/* ===== 구글 드라이브 자동 백업 (GIS 토큰 · drive.file) ===== */
+const GDRIVE_SCOPE="https://www.googleapis.com/auth/drive.file";
+let gTokenClient=null, gAccessToken="", gTokenExp=0, gTokenCb=null;
+function gd(){ DB.settings=DB.settings||{}; return (DB.settings.gdrive=DB.settings.gdrive||{clientId:"",auto:false,folderId:"",folderName:"",keepDays:30}); }
+function gdriveFolder(){ return (DB.progTitle||"기숙사퇴실체크아웃")+"_백업"; }
+function gisReady(){ return typeof google!=="undefined" && google.accounts && google.accounts.oauth2; }
+function gInitClient(){
+  const cfg=gd(); if(!cfg.clientId){toast("먼저 클라이언트 ID를 입력하세요");return false;}
+  if(!gisReady()){toast("구글 모듈 로딩 실패(인터넷 확인)");return false;}
+  if(!gTokenClient){
+    gTokenClient=google.accounts.oauth2.initTokenClient({
+      client_id:cfg.clientId, scope:GDRIVE_SCOPE,
+      callback:(resp)=>{ if(resp&&resp.access_token){gAccessToken=resp.access_token; gTokenExp=Date.now()+(resp.expires_in?resp.expires_in*1000:3500000); if(gTokenCb){const cb=gTokenCb;gTokenCb=null;cb(true);}}
+        else { if(gTokenCb){const cb=gTokenCb;gTokenCb=null;cb(false);} } },
+      error_callback:()=>{ if(gTokenCb){const cb=gTokenCb;gTokenCb=null;cb(false);} }
+    });
+  }
+  return true;
+}
+function gGetToken(interactive){
+  return new Promise(res=>{
+    if(gAccessToken && Date.now()<gTokenExp-60000) return res(true);
+    if(!gInitClient()) return res(false);
+    gTokenCb=res;
+    try{ gTokenClient.requestAccessToken({prompt: interactive?"consent":""}); }
+    catch(e){ gTokenCb=null; res(false); }
+  });
+}
+async function gFetch(url,opts){ opts=opts||{}; opts.headers=Object.assign({Authorization:"Bearer "+gAccessToken},opts.headers||{});
+  const r=await fetch(url,opts); if(r.status===401){gAccessToken="";throw new Error("auth");} return r; }
+async function gEnsureFolder(){
+  const cfg=gd(); const fname=gdriveFolder();
+  if(cfg.folderId && cfg.folderName===fname){
+    try{const r=await gFetch(`https://www.googleapis.com/drive/v3/files/${cfg.folderId}?fields=id,trashed`);
+      if(r.ok){const j=await r.json(); if(j.id&&!j.trashed)return cfg.folderId;}}catch(e){}
+  }
+  const q=encodeURIComponent(`name='${fname}' and mimeType='application/vnd.google-apps.folder' and trashed=false`);
+  let r=await gFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`);
+  let j=await r.json();
+  if(j.files&&j.files.length){cfg.folderId=j.files[0].id;cfg.folderName=fname;save();return cfg.folderId;}
+  r=await gFetch("https://www.googleapis.com/drive/v3/files?fields=id",{method:"POST",
+    headers:{"Content-Type":"application/json"},
+    body:JSON.stringify({name:fname,mimeType:"application/vnd.google-apps.folder"})});
+  j=await r.json(); cfg.folderId=j.id; cfg.folderName=fname; save(); return cfg.folderId;
+}
+async function gFindFile(name,folderId){
+  const q=encodeURIComponent(`name='${name}' and '${folderId}' in parents and trashed=false`);
+  const r=await gFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name)`);
+  const j=await r.json(); return (j.files&&j.files.length)?j.files[0]:null;
+}
+async function gPutFile(name,jsonStr,folderId,existingId){
+  const form=new FormData();
+  const meta=existingId?{name}:{name,parents:[folderId]};
+  form.append("metadata",new Blob([JSON.stringify(meta)],{type:"application/json"}));
+  form.append("file",new Blob([jsonStr],{type:"application/json"}));
+  const url=existingId
+    ?`https://www.googleapis.com/upload/drive/v3/files/${existingId}?uploadType=multipart&fields=id,name`
+    :`https://www.googleapis.com/upload/drive/v3/files?uploadType=multipart&fields=id,name`;
+  const r=await gFetch(url,{method:existingId?"PATCH":"POST",body:form});
+  if(!r.ok)throw new Error("upload "+r.status);
+  return await r.json();
+}
+async function gCleanOld(folderId,keepDays){
+  try{
+    const q=encodeURIComponent(`'${folderId}' in parents and trashed=false`);
+    const r=await gFetch(`https://www.googleapis.com/drive/v3/files?q=${q}&fields=files(id,name,createdTime)&orderBy=createdTime`);
+    const j=await r.json(); if(!j.files)return;
+    const cutoff=Date.now()-(keepDays||30)*86400000;
+    for(const f of j.files){
+      if(f.name==="최신.json")continue;
+      if(new Date(f.createdTime).getTime()<cutoff){
+        try{await gFetch(`https://www.googleapis.com/drive/v3/files/${f.id}`,{method:"DELETE"});}catch(e){}
+      }
+    }
+  }catch(e){}
+}
+async function gUploadBackup(){
+  const folderId=await gEnsureFolder();
+  const jsonStr=JSON.stringify(buildBackupPayload());
+  const latest=await gFindFile("최신.json",folderId);
+  await gPutFile("최신.json",jsonStr,folderId,latest?latest.id:null);
+  const dayName=todayStr()+".json";
+  const dayFile=await gFindFile(dayName,folderId);
+  const uploaded=await gPutFile(dayName,jsonStr,folderId,dayFile?dayFile.id:null);
+  gCleanOld(folderId,gd().keepDays||30);
+  return uploaded;
+}
+async function driveConnect(){
+  if(!gInitClient())return;
+  toast("구글 연결 중...");
+  const ok=await gGetToken(true);
+  if(!ok){toast("구글 연결 취소/실패");return;}
+  try{ await gEnsureFolder(); renderDriveStatus(); toast("구글 드라이브 연결됨"); }
+  catch(e){ toast("폴더 준비 실패 — 권한을 확인하세요"); }
+}
+async function driveBackupNow(interactive){
+  const cfg=gd(); if(!cfg.clientId){toast("클라이언트 ID를 입력하세요");return;}
+  const ok=await gGetToken(interactive!==false);
+  if(!ok){ if(interactive!==false)toast("구글 인증 필요 — [구글 연결]을 먼저 눌러주세요"); return; }
+  try{ const f=await gUploadBackup(); renderDriveStatus(f.name); if(interactive!==false)toast("드라이브 업로드 완료: "+f.name); }
+  catch(e){ if(interactive!==false)toast("업로드 실패 — 연결/권한 확인"); }
+}
+function toggleDriveSettings(){
+  const p=document.getElementById("gd-settings-panel");
+  const lbl=document.getElementById("gd-setting-lbl");
+  const ico=document.getElementById("gd-setting-ico");
+  const show=p.style.display==="none";
+  p.style.display=show?"block":"none";
+  lbl.innerHTML=show?"드라이브 연결 설정 닫기<small>설정 완료 후 닫으세요</small>"
+                    :"드라이브 연결 설정 열기<small>클라이언트 ID · 구글 연결 · 자동 백업</small>";
+  ico.textContent=show?"🔼":"⚙️";
+}
+function saveDriveClientId(){gd().clientId=document.getElementById("gd-clientid").value.trim();save();gTokenClient=null;renderDriveStatus();}
+function toggleDriveAuto(){gd().auto=document.getElementById("gd-auto").checked;save();renderDriveStatus();}
+function saveDriveKeepDays(){gd().keepDays=+document.getElementById("gd-keepdays").value||30;save();}
+function renderDriveStatus(lastName){
+  const cfg=gd(),el=document.getElementById("gd-status"); if(!el)return;
+  let s=cfg.clientId?"✅ 클라이언트 ID 등록됨":"❌ 클라이언트 ID 미등록";
+  s+=cfg.folderId?` · 📁 폴더 연결됨(<b>${esc(cfg.folderName||gdriveFolder())}</b>)`:" · 📁 폴더 미연결";
+  s+=cfg.auto?" · 🔄 자동 ON":" · 자동 OFF";
+  s+=` · 보관 <b>${cfg.keepDays||30}일</b>`;
+  if(lastName)s+=`<br>🕒 최근 업로드: <b>${esc(lastName)}</b>`;
+  el.innerHTML=s;
+  const a=document.getElementById("gd-auto"); if(a)a.checked=!!cfg.auto;
+  const c=document.getElementById("gd-clientid"); if(c&&!c.value)c.value=cfg.clientId||"";
+  const k=document.getElementById("gd-keepdays"); if(k)k.value=String(cfg.keepDays||30);
+}
+
+/* ===== 엑셀 내보내기 (보고용) ===== */
+function exportXlsx(){
+  if(typeof XLSX==="undefined"){toast("엑셀 모듈 로딩 실패(인터넷 필요)");return;}
+  const from=document.getElementById("exp-from").value, to=document.getElementById("exp-to").value;
+  const inR=d=>(!from||d>=from)&&(!to||d<=to);
+  const byHakAsc=(a,b)=>String(a).localeCompare(String(b),undefined,{numeric:true});
+  const rows=[];
+  Object.keys(DB.records||{}).filter(inR).sort().forEach(date=>{
+    const r=DB.records[date]||{};
+    Object.keys(r.individual||{}).sort(byHakAsc).forEach(hak=>{
+      const s=byHak[hak]||{name:"?",room:""};
+      const items=Object.keys(r.individual[hak]).filter(k=>r.individual[hak][k]);
+      if(items.length) rows.push([date,"개인벌점",s.room||"",hak,s.name,items.join(", ")]);
+    });
+    Object.keys(r.room||{}).sort((a,b)=>+a-+b).forEach(no=>{
+      const rd=r.room[no]||{}; const dem=Object.keys(rd.demerits||{}).filter(k=>rd.demerits[k]);
+      if(!dem.length) return;
+      (ROOMS[no]||[]).filter(s=>!(r.exclusions&&r.exclusions[s.hak])).sort((a,b)=>byHakAsc(a.hak,b.hak))
+        .forEach(s=>rows.push([date,"호실벌점",no,s.hak,s.name,dem.join(", ")]));
+    });
+  });
+  if(!rows.length){toast("내보낼 기록이 없습니다");return;}
+  const aoa=[["날짜","구분","호실","학번","이름","벌점항목"],...rows];
+  const ws=XLSX.utils.aoa_to_sheet(aoa);
+  ws["!cols"]=[{wch:11},{wch:9},{wch:7},{wch:8},{wch:14},{wch:24}];
+  const wb=XLSX.utils.book_new(); XLSX.utils.book_append_sheet(wb,ws,"퇴실체크아웃");
+  const fn=`${(DB.progTitle||'기숙사퇴실체크아웃')}_${(from||'').replace(/-/g,'')}-${(to||'').replace(/-/g,'')}.xlsx`;
+  XLSX.writeFile(wb,fn);
+  toast("엑셀 파일 저장됨");
 }
 
 /* ===== 기록 달력 ===== */
@@ -833,6 +1128,10 @@ function openData(){
   renderRosterStatus();
   buildSetFields();
   renderAutoInfo();
+  renderDriveStatus();
+  const ef=document.getElementById('exp-from'), et=document.getElementById('exp-to');
+  if(ef&&!ef.value) ef.value=addDays(todayStr(),-13);
+  if(et&&!et.value) et.value=todayStr();
   showOv('ov-data');
 }
 function renderRosterStatus(){
@@ -938,56 +1237,60 @@ function parseLink(ev){
   rd.onload=e=>{
     try{
       const wb=XLSX.read(new Uint8Array(e.target.result),{type:'array'});
-      // [v1.1] 기숙사 일지의 '기숙사입실현황' 시트만 연동
-      const shName = wb.SheetNames.find(n=>/기숙사입실현황|입실현황/.test(n));
-      if(!shName){
-        document.getElementById('link-preview').innerHTML='<div class="hint" style="color:#b45309">‘기숙사입실현황’ 시트가 없습니다. 기숙사 일지 엑셀을 선택해주세요.</div>';
-        document.getElementById('link-apply').disabled=true; pendingLink=null; return;
-      }
+      const T=v=>String(v==null?'':v).trim();
+      const names=wb.SheetNames;
+      const statusName=names.find(n=>/입실현황/.test(n));
+      const gwigaName=names.find(n=>/귀가/.test(n));
+      let shName,mode;
+      if(statusName){shName=statusName;mode='status';}
+      else if(gwigaName){shName=gwigaName;mode='gwiga';}
+      else{toast("'기숙사입실현황' 또는 '귀가' 시트를 찾지 못했습니다");ev.target.value='';return;}
       const rows=XLSX.utils.sheet_to_json(wb.Sheets[shName],{header:1,defval:''});
-      // 이름 정규화(공백/끝 영문 제거) — 학번+이름으로 본인 확인
-      const norm=s=>String(s||'').replace(/\s/g,'').replace(/[A-Za-z]+$/,'');
-      const result={}; let section=null; let mismatch=0;
-      rows.forEach(row=>{
-        const cells=row.map(x=>String(x).trim());
-        const text=cells.join(' ');
-        // (학번, 바로 옆=이름) 쌍 — 현재 명단에 있는 4자리 학번만
-        const pairs=[];
-        cells.forEach((c,i)=>{ if(/^\d{4}$/.test(c)&&byHak[c]) pairs.push([c, cells[i+1]||'']); });
-        // 구역 헤더(학번 없는 줄): 미입사자/퇴사자 vs 귀가자
-        if(pairs.length===0){
-          if(/미입사자|퇴사자/.test(text)) section='leave';
-          else if(/귀가자/.test(text)) section='home';
+      const cand=[];
+      if(mode==='gwiga'){
+        // 귀가 시트: 상단 귀가표만 사용 (학번열 두 번째 등장 시 중단)
+        let head=-1,cHak=-1,cName=-1;
+        for(let r=0;r<rows.length;r++){const cells=rows[r].map(T);
+          const h=cells.indexOf('학번'); if(h>=0){head=r;cHak=h;cName=cells.indexOf('이름');break;}}
+        if(head>=0){
+          for(let r=head+1;r<rows.length;r++){const cells=rows[r].map(T);
+            if(cells.indexOf('학번')>=0)break;
+            const hak=T(rows[r][cHak]);
+            if(/^\d{4}$/.test(hak))cand.push({hak,name:cName>=0?T(rows[r][cName]):''});}
         }
-        // 행 내 사유 키워드(우선) — 없으면 구역 기본값('귀자' 같은 오타도 귀가 구역이면 귀가)
-        let kw=null;
-        if(/명령퇴사|자진퇴사|퇴사/.test(text)) kw='퇴사';
-        else if(/미입사|미입소|미입실/.test(text)) kw='미입사';
-        else if(/귀가/.test(text)) kw='귀가';
-        else if(/결석|조퇴/.test(text)) kw='결석';
-        pairs.forEach(([h,nm])=>{
-          let st = kw || (section==='home'?'귀가':(section==='leave'?'미입사':null));
-          if(!st) return;
-          if(nm && norm(nm)!==norm(byHak[h].name)){ mismatch++; return; }
-          result[h]=st;
+      }else{
+        // 기숙사입실현황 시트: 좌·우 2단, '미입사자 퇴사자' + '귀가자' 표 모두 수집
+        let hakCols=[];
+        rows.forEach(row=>{const cells=row.map(T);
+          const hs=[]; cells.forEach((c,i)=>{if(c==='학번')hs.push(i);});
+          if(hs.length){hakCols=hs;return;}
+          hakCols.forEach(hc=>{const hak=T(row[hc]);
+            if(/^\d{4}$/.test(hak))cand.push({hak,name:T(row[hc+1])});});
         });
-      });
-      const cnt=Object.keys(result).length;
-      pendingLink={result, file:f.name, count:cnt};
+      }
+      // 총원 명단 매칭 (학번 + 이름 일치, 여학생/비명단 자동 제외)
+      const norm=s=>T(s).replace(/\s/g,''), base=s=>norm(s).replace(/[A-Za-z]$/,'');
+      const nmatch=(a,b)=>{a=norm(a);b=norm(b);if(!b)return true;const A=base(a),B=base(b);
+        return a===b||A===B||A.startsWith(B)||B.startsWith(A);};
+      const result={}; let cnt=0,dropped=0; const seen=new Set();
+      cand.forEach(c=>{const s=byHak[c.hak];
+        if(s&&nmatch(s.name,c.name)){if(!seen.has(c.hak)){seen.add(c.hak);result[c.hak]='귀가';cnt++;}}
+        else dropped++;});
+      const srcLabel=mode==='status'?'기숙사입실현황':'귀가';
+      pendingLink={result,file:f.name,count:cnt,sheet:srcLabel,dropped};
       const prev=document.getElementById('link-preview');
-      if(!cnt){ prev.innerHTML=`<div class="hint" style="color:#b45309">기숙사입실현황에서 매칭되는 미입사·퇴사·귀가·결석 학생이 없습니다.${mismatch?` (학번은 있으나 이름 불일치 ${mismatch}건)`:''}</div>`;
-        document.getElementById('link-apply').disabled=false; return; }
-      const order={미입사:0,퇴사:1,귀가:2,결석:3,조퇴:4};
-      const list=Object.entries(result).sort((a,b)=>(order[a[1]]??9)-(order[b[1]]??9))
-        .map(([h,st])=>`<span style="white-space:nowrap;margin-right:8px;display:inline-block"><b style="color:${stColor(st)}">●</b> ${byHak[h].room}호 ${byHak[h].name}(${st})</span>`).join('');
+      if(!cnt){
+        prev.innerHTML=`<div class="hint" style="color:#b45309">현재 명단과 매칭되는 귀가·퇴사·미입사 학생이 없습니다.<br>시트: ${srcLabel} (확인: 남학생 명단인지, 파일 양식이 맞는지)</div>`;
+        document.getElementById('link-apply').disabled=false; return;
+      }
+      const names2=Object.keys(result).map(h=>`${byHak[h]?byHak[h].room+'호 '+byHak[h].name:h}`).join(', ');
       prev.innerHTML=`<div class="hint" style="border-style:solid;border-color:#10b981;color:#047857">
-        ✅ 매칭 <b>${cnt}</b>명${mismatch?` · 이름 불일치 ${mismatch}건 제외`:''}<br>${list}</div>`;
+        ✅ <b>시트: ${srcLabel}</b> · 매칭 <b>${cnt}</b>명${dropped?` (명단 외 제외 ${dropped}명)`:''}<br>${names2}</div>`;
       document.getElementById('link-apply').disabled=false;
     }catch(err){ toast('엑셀을 읽을 수 없습니다'); }
   };
-  rd.readAsArrayBuffer(f);
+  rd.readAsArrayBuffer(f); ev.target.value='';
 }
-function stColor(st){ return st==='귀가'?'#0ea5e9':st==='퇴사'?'#64748b':st==='미입사'?'#a855f7':st==='결석'?'#e11d48':st==='조퇴'?'#f59e0b':'#64748b'; }
 function applyLink(){
   if(!pendingLink) return;
   const r=R();
@@ -1001,19 +1304,16 @@ function unlinkLog(){
   if(!r.logLink){ toast('연동된 일지가 없습니다'); return; }
   if(!confirm('당일 일지 연동을 해제할까요?\n(자동 반영된 귀가/미입사 표시도 함께 해제됩니다. 퇴사는 유지)')) return;
   // 연동으로 들어온 귀가/미입사만 제거(퇴사는 장기로 보고 유지)
-  Object.keys(r.exclusions).forEach(h=>{ if(['귀가','미입사','결석','조퇴'].includes(r.exclusions[h])) delete r.exclusions[h]; });
+  Object.keys(r.exclusions).forEach(h=>{ if(r.exclusions[h]==='귀가'||r.exclusions[h]==='미입사') delete r.exclusions[h]; });
   delete r.logLink; save(); render(); renderLinkBar(); renderLinkStatusBox();
   toast('연동이 해제되었습니다');
 }
 function renderLinkBar(){
   const r=R(); const bar=document.getElementById('link-bar');
-  const btn=document.getElementById('link-tool-btn');
   if(r.logLink){ bar.className='link-bar on';
-    bar.innerHTML=`🔗 당일 일지: <b>연동됨</b> · ${r.logLink.file} · ${r.logLink.count}명 제외 반영`;
-    if(btn){ btn.classList.add('linked'); btn.innerHTML='✅ 일지 연동완료'; } }
+    bar.innerHTML=`🔗 당일 일지: <b>연동됨</b> · ${r.logLink.file} · ${r.logLink.count}명 제외 반영`; }
   else { bar.className='link-bar off';
-    bar.innerHTML=`🔗 당일 일지: <b>미연동</b> — 눌러서 ${curDate} 미입사·퇴사·귀가 명단을 연동하세요`;
-    if(btn){ btn.classList.remove('linked'); btn.innerHTML='🔗 당일 일지 연동'; } }
+    bar.innerHTML=`🔗 당일 일지: <b>미연동</b> — 눌러서 ${curDate} 귀가·퇴사·미입사 명단을 연동하세요`; }
 }
 
 
@@ -1101,6 +1401,15 @@ window.addEventListener('resize', ()=>{ clearTimeout(window._fr); window._fr=set
 document.querySelectorAll('.ov').forEach(o=>o.addEventListener('click',e=>{ if(e.target===o) o.classList.remove('show'); }));
 
 init();
+(function autoDriveBackup(){
+  const cfg=(DB.settings&&DB.settings.gdrive)||{};
+  if(!cfg.auto||!cfg.clientId)return;
+  let tries=0;
+  const t=setInterval(()=>{ tries++;
+    if(gisReady()){clearInterval(t); setTimeout(()=>driveBackupNow(false),1500);}
+    else if(tries>20)clearInterval(t);
+  },500);
+})();
 </script>
 </body>
 </html>
