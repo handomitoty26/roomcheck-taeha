@@ -116,7 +116,9 @@
   .stu.excluded .gdot{opacity:.3;}
   .stu.excluded .nm{text-decoration:line-through;font-weight:600;}
   .stu .ex-tag{font-size:10px;font-weight:800;padding:1px 5px;border-radius:5px;color:#fff;}
+  .ex-tag{background:#64748b;}
   .ex-귀가{background:#0ea5e9;} .ex-퇴사{background:#64748b;} .ex-미입사{background:#a855f7;}
+  .ex-명령퇴사{background:#475569;} .ex-자진퇴사{background:#94a3b8;} .ex-조퇴{background:#f59e0b;} .ex-결석{background:#ef4444;} .ex-외출{background:#0ea5e9;}
   /* 메모 */
   .memo{flex:0 0 auto;background:var(--card);border-radius:12px;padding:10px 14px;margin:10px 0;
     border:1px solid var(--line);box-shadow:0 1px 4px rgba(0,0,0,.05);}
@@ -438,7 +440,7 @@
       <div id="cal-body"></div>
       <div style="display:flex;gap:8px;margin-top:10px">
         <button class="btn btn-g" onclick="closeOv('ov-cal')">닫기</button>
-        <button class="btn btn-p" onclick="pickDate(todayStr())">오늘로</button>
+        <button class="btn btn-p" onclick="pickDate(workDateStr())">오늘로</button>
       </div>
     </div>
   </div>
@@ -501,22 +503,36 @@ function save(){ localStorage.setItem(STORE_KEY, JSON.stringify(DB)); }
 function todayStr(){ const d=new Date();
   return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0'); }
 function localHour(){ return new Date().getHours(); }
+/* 업무 기준일: 근무가 15시~다음날 09시이므로, 오전 11시 이전이면 전날(근무 시작일) 시트를 유지하고
+   오전 11시에 오늘(새 시트)로 자동 초기화한다. 기록은 날짜별로 영구 보관됨. */
+function workDateStr(){
+  const d=new Date();
+  if(d.getHours() < 11){ d.setDate(d.getDate()-1); }
+  return d.getFullYear()+'-'+String(d.getMonth()+1).padStart(2,'0')+'-'+String(d.getDate()).padStart(2,'0');
+}
 
-let curDate = todayStr();   // 실제 오늘 날짜로 시작 (전날 기록은 날짜별로 보관)
+let curDate = workDateStr();   // 업무 기준일로 시작 (오전 11시 이전엔 전날 유지)
 let curTab = 0;
 let autoFollow = true;      // 오늘 자동 추종 여부(과거 날짜 열람 시 false)
 
 /* 날짜 레코드 가져오기(없으면 생성: 장기 제외자 승계) */
+function isLongTerm(st){ return /퇴사|미입사/.test(st||''); }
+/* manualSet(hak→true): 사람이 직접 추가/수정한 제외자만 기록하는 신뢰 가능한 집합.
+   연동/승계는 절대 이 집합을 오염시키지 않으므로, 과거 버전이 남긴 잘못된 데이터와 무관하게 동작한다.
+   승계·연동 시 manualSet에 없는 장기 제외자(퇴사/미입사)는 정리 대상이 된다. */
 function rec(date){
   if(DB.records[date]) return DB.records[date];
-  const r={individual:{},room:{},exclusions:{},memo:""};
-  // 직전 날짜의 장기(퇴사/미입사)만 승계, 또는 샘플기준일이면 기본 제외자 시드
+  const r={individual:{},room:{},exclusions:{},manualSet:{},memo:""};
   const prior = Object.keys(DB.records).filter(d=>d<date).sort();
   if(prior.length){
     const p=DB.records[prior[prior.length-1]];
-    Object.entries(p.exclusions||{}).forEach(([h,st])=>{ if(st==="퇴사"||st==="미입사") r.exclusions[h]=st; });
+    const pms=p.manualSet||{};
+    // 사람이 직접 지정(manualSet)한 장기 제외자만 다음날로 승계. 연동분은 매일 파일이 다시 공급하므로 승계하지 않음.
+    Object.entries(p.exclusions||{}).forEach(([h,st])=>{
+      if(isLongTerm(st) && pms[h]){ r.exclusions[h]=st; r.manualSet[h]=true; }
+    });
   }else if(date===DEFAULT_DATE){
-    DEFAULT_EXCL.forEach(e=>r.exclusions[e.hak]=e.status);
+    DEFAULT_EXCL.forEach(e=>{ r.exclusions[e.hak]=e.status; r.manualSet[e.hak]=true; });
   }
   DB.records[date]=r; return r;
 }
@@ -529,7 +545,7 @@ function R(){ return rec(curDate); }
 let _autoTimer=null;
 function modalOpen(){ return [...document.querySelectorAll('.ov')].some(o=>o.classList.contains('show')); }
 function autoRollCheck(){
-  const t=todayStr(), h=localHour();
+  const t=workDateStr(), h=localHour();
   if(autoFollow && curDate < t && !modalOpen()){
     curDate = t;
     document.getElementById('date-input').value = t;
@@ -556,11 +572,11 @@ document.addEventListener('visibilitychange', ()=>{ if(!document.hidden) autoRol
 window.addEventListener('focus', autoRollCheck);
 
 function onDateChange(){
-  curDate=document.getElementById('date-input').value||todayStr();
-  autoFollow = (curDate >= todayStr());   // 과거 날짜를 보면 자동전환 멈춤
+  curDate=document.getElementById('date-input').value||workDateStr();
+  autoFollow = (curDate >= workDateStr());   // 과거 날짜를 보면 자동전환 멈춤
   render();
 }
-function goToday(){ curDate=todayStr(); autoFollow=true;
+function goToday(){ curDate=workDateStr(); autoFollow=true;
   document.getElementById('date-input').value=curDate; render(); }
 
 function renderTabs(){
@@ -721,7 +737,11 @@ function applyPaste(){
   txt.split(/\n+/).forEach(line=>{
     line=line.trim(); if(!line) return;
     let status="미입사";
-    if(/귀가/.test(line)) status="귀가";
+    if(/명령\s*퇴사/.test(line)) status="명령퇴사";
+    else if(/자진\s*퇴사/.test(line)) status="자진퇴사";
+    else if(/조퇴/.test(line)) status="조퇴";
+    else if(/결석/.test(line)) status="결석";
+    else if(/귀가/.test(line)) status="귀가";
     else if(/퇴사/.test(line)) status="퇴사";
     else if(/미입사|미입소|미입실/.test(line)) status="미입사";
     const hakM=line.match(/\b(\d{4})\b/);
@@ -731,7 +751,7 @@ function applyPaste(){
       const cand=STUDENTS.filter(s=>line.includes(s.name));
       if(cand.length===1) target=cand[0].hak;
     }
-    if(target){ r.exclusions[target]=status; cnt++; }
+    if(target){ r.exclusions[target]=status; if(!r.manualSet)r.manualSet={}; r.manualSet[target]=true; cnt++; }
   });
   save(); document.getElementById('excl-paste').value=''; renderExclCurrent(); render();
   toast(cnt?`${cnt}명 반영됨`:'매칭된 학생이 없습니다');
@@ -745,7 +765,7 @@ function renderExclSearch(){
     <button class="btn btn-g" style="flex:0;padding:6px 10px;font-size:12px" onclick="addExcl('${s.hak}')">추가</button></div>`).join('')
     || '<div class="hint">일치하는 학생이 없습니다.</div>';
 }
-function addExcl(hak){ R().exclusions[hak]="귀가"; save(); document.getElementById('excl-search').value='';
+function addExcl(hak){ const r=R(); r.exclusions[hak]="귀가"; if(!r.manualSet)r.manualSet={}; r.manualSet[hak]=true; save(); document.getElementById('excl-search').value='';
   document.getElementById('excl-search-list').innerHTML=''; renderExclCurrent(); }
 function renderExclCurrent(){
   const r=R(); const box=document.getElementById('excl-current');
@@ -754,15 +774,15 @@ function renderExclCurrent(){
   box.innerHTML=ents.map(h=>{ const s=byHak[h]; const st=r.exclusions[h];
     return `<div class="ex-item"><span class="enm">${s.room}호 ${s.name} (${s.hak})</span>
       <select onchange="setExcl('${h}',this.value)">
-        ${["귀가","퇴사","미입사"].map(o=>`<option ${o===st?'selected':''}>${o}</option>`).join('')}
+        ${["귀가","조퇴","결석","퇴사","명령퇴사","자진퇴사","미입사"].map(o=>`<option ${o===st?'selected':''}>${o}</option>`).join('')}
       </select>
       <button class="btn btn-r" style="flex:0;padding:6px 9px;font-size:12px" onclick="rmExcl('${h}')">해제</button></div>`;
   }).join('');
 }
-function setExcl(h,v){ R().exclusions[h]=v; save(); }
-function rmExcl(h){ delete R().exclusions[h]; save(); renderExclCurrent(); render(); }
+function setExcl(h,v){ const r=R(); r.exclusions[h]=v; if(!r.manualSet)r.manualSet={}; r.manualSet[h]=true; save(); }
+function rmExcl(h){ const r=R(); delete r.exclusions[h]; if(r.manualSet)delete r.manualSet[h]; save(); renderExclCurrent(); render(); }
 function clearAllExcl(){ if(!confirm('현재 날짜의 제외 대상을 모두 해제할까요?'))return;
-  R().exclusions={}; save(); renderExclCurrent(); render(); }
+  const r=R(); r.exclusions={}; r.manualSet={}; save(); renderExclCurrent(); render(); }
 
 /* ===== 상점 순위 집계 ===== */
 function openMerit(){
@@ -795,7 +815,8 @@ function calcMerit(){
   h+=`<table class="tbl"><tr><th>순위</th><th>호실</th><th>점수</th><th>등급내역(상·중·하)</th><th>선택</th></tr>`;
   ranked.forEach((no,i)=>{
     const cnt={상:0,중:0,하:0}; detail[no].forEach(g=>cnt[g]++);
-    h+=`<tr class="${i<N?'top':''}"><td>${i+1}</td><td><b>${no}호</b></td><td>${scores[no]}</td>
+    const studs=(ROOMS[no]||[]).map(s=>`${s.hak} ${s.name}`).join(', ');
+    h+=`<tr class="${i<N?'top':''}"><td>${i+1}</td><td><b>${no}호</b><div style="font-size:11px;color:#64748b;font-weight:400;margin-top:3px;line-height:1.5">${studs||'-'}</div></td><td>${scores[no]}</td>
       <td>${cnt.상}·${cnt.중}·${cnt.하}</td>
       <td><input type="checkbox" class="award-ck" data-no="${no}" ${i<N&&scores[no]>0?'checked':''}></td></tr>`;
   });
@@ -906,7 +927,7 @@ function doRestore(ev){
         rosterMeta=d.roster.meta||rosterMeta; buildRoster(d.roster.students);
         localStorage.setItem(ROSTER_KEY, JSON.stringify({students:STUDENTS,meta:rosterMeta}));
       }
-      curDate=todayStr(); autoFollow=true; closeOv('ov-data');
+      curDate=workDateStr(); autoFollow=true; closeOv('ov-data');
       save(); init();
       toast(`복원 완료 (${n}일분) — 달력에서 날짜를 선택하세요`);
       openCalendar(true);
@@ -1087,13 +1108,13 @@ function dataDays(){
 }
 function openCalendar(afterRestore){
   const days=[...dataDays()].sort();
-  const focus = (afterRestore && days.length) ? days[days.length-1] : (curDate||todayStr());
+  const focus = (afterRestore && days.length) ? days[days.length-1] : (curDate||workDateStr());
   const f=new Date(focus+'T00:00'); calY=f.getFullYear(); calM=f.getMonth();
   renderCal(); showOv('ov-cal');
 }
 function calShift(n){ const dt=new Date(calY, calM+n, 1); calY=dt.getFullYear(); calM=dt.getMonth(); renderCal(); }
 function renderCal(){
-  const has=dataDays(); const today=todayStr();
+  const has=dataDays(); const today=workDateStr();
   const startDow=new Date(calY,calM,1).getDay();
   const dim=new Date(calY,calM+1,0).getDate();
   let h=`<div class="cal-nav"><button class="cal-arrow" onclick="calShift(-1)">‹</button>`+
@@ -1110,7 +1131,7 @@ function renderCal(){
   document.getElementById('cal-body').innerHTML=h;
 }
 function pickDate(ds){
-  curDate=ds; autoFollow=(ds>=todayStr());
+  curDate=ds; autoFollow=(ds>=workDateStr());
   document.getElementById('date-input').value=ds;
   closeOv('ov-cal'); render(); toast(`${ds} 시트로 이동`);
 }
@@ -1247,25 +1268,45 @@ function parseLink(ev){
       else{toast("'기숙사입실현황' 또는 '귀가' 시트를 찾지 못했습니다");ev.target.value='';return;}
       const rows=XLSX.utils.sheet_to_json(wb.Sheets[shName],{header:1,defval:''});
       const cand=[];
+      // 사유/구분 텍스트에서 정확한 상태 라벨을 뽑아낸다 (미입사/명령퇴사/자진퇴사/조퇴/결석/귀가/외출 등)
+      const pickExitLabel=raw=>{ const t=T(raw);
+        if(/미입사/.test(t))return'미입사';
+        if(/명령\s*퇴사/.test(t))return'명령퇴사';
+        if(/자진\s*퇴사/.test(t))return'자진퇴사';
+        if(/퇴사/.test(t))return'퇴사';
+        return'퇴사'; };
+      const pickLeaveLabel=raw=>{ const t=T(raw); return t||'귀가'; };
       if(mode==='gwiga'){
-        // 귀가 시트: 상단 귀가표만 사용 (학번열 두 번째 등장 시 중단)
-        let head=-1,cHak=-1,cName=-1;
+        // 귀가 시트: 상단 귀가표만 사용 (학번열 두 번째 등장 시 중단), '구분' 열 값을 라벨로 사용
+        let head=-1,cHak=-1,cName=-1,cDiv=-1;
         for(let r=0;r<rows.length;r++){const cells=rows[r].map(T);
-          const h=cells.indexOf('학번'); if(h>=0){head=r;cHak=h;cName=cells.indexOf('이름');break;}}
+          const h=cells.indexOf('학번'); if(h>=0){head=r;cHak=h;cName=cells.indexOf('이름');cDiv=cells.indexOf('구분');break;}}
         if(head>=0){
           for(let r=head+1;r<rows.length;r++){const cells=rows[r].map(T);
             if(cells.indexOf('학번')>=0)break;
             const hak=T(rows[r][cHak]);
-            if(/^\d{4}$/.test(hak))cand.push({hak,name:cName>=0?T(rows[r][cName]):''});}
+            if(/^\d{4}$/.test(hak)){
+              const label=cDiv>=0?pickLeaveLabel(rows[r][cDiv]):'귀가';
+              cand.push({hak,name:cName>=0?T(rows[r][cName]):'',label});
+            }}
         }
       }else{
-        // 기숙사입실현황 시트: 좌·우 2단, '미입사자 퇴사자' + '귀가자' 표 모두 수집
-        let hakCols=[];
+        // 기숙사입실현황 시트: '미입사자 퇴사자' 표 + '귀가자' 표를 구간으로 구분해 각각 다른 라벨 규칙 적용
+        let hakCols=[]; let section=null; // 'exit' | 'leave'
         rows.forEach(row=>{const cells=row.map(T);
+          const joined=cells.join(' ');
+          if(/미입사자/.test(joined)){section='exit';return;}
+          if(/귀가자/.test(joined)){section='leave';return;}
           const hs=[]; cells.forEach((c,i)=>{if(c==='학번')hs.push(i);});
           if(hs.length){hakCols=hs;return;}
           hakCols.forEach(hc=>{const hak=T(row[hc]);
-            if(/^\d{4}$/.test(hak))cand.push({hak,name:T(row[hc+1])});});
+            if(/^\d{4}$/.test(hak)){
+              let label;
+              if(section==='exit'){ label=pickExitLabel(row[hc+3]); }       // No,학번,이름,기간,사유 → 사유=hc+3
+              else if(section==='leave'){ label=pickLeaveLabel(row[hc+2]); } // No,학번,이름,귀가/결석 → hc+2
+              else label='귀가';
+              cand.push({hak,name:T(row[hc+1]),label});
+            }});
         });
       }
       // 총원 명단 매칭 (학번 + 이름 일치, 여학생/비명단 자동 제외)
@@ -1274,7 +1315,7 @@ function parseLink(ev){
         return a===b||A===B||A.startsWith(B)||B.startsWith(A);};
       const result={}; let cnt=0,dropped=0; const seen=new Set();
       cand.forEach(c=>{const s=byHak[c.hak];
-        if(s&&nmatch(s.name,c.name)){if(!seen.has(c.hak)){seen.add(c.hak);result[c.hak]='귀가';cnt++;}}
+        if(s&&nmatch(s.name,c.name)){if(!seen.has(c.hak)){seen.add(c.hak);result[c.hak]=c.label||'귀가';cnt++;}}
         else dropped++;});
       const srcLabel=mode==='status'?'기숙사입실현황':'귀가';
       pendingLink={result,file:f.name,count:cnt,sheet:srcLabel,dropped};
@@ -1283,7 +1324,7 @@ function parseLink(ev){
         prev.innerHTML=`<div class="hint" style="color:#b45309">현재 명단과 매칭되는 귀가·퇴사·미입사 학생이 없습니다.<br>시트: ${srcLabel} (확인: 남학생 명단인지, 파일 양식이 맞는지)</div>`;
         document.getElementById('link-apply').disabled=false; return;
       }
-      const names2=Object.keys(result).map(h=>`${byHak[h]?byHak[h].room+'호 '+byHak[h].name:h}`).join(', ');
+      const names2=Object.keys(result).map(h=>`${byHak[h]?byHak[h].room+'호 '+byHak[h].name:h}(${result[h]})`).join(', ');
       prev.innerHTML=`<div class="hint" style="border-style:solid;border-color:#10b981;color:#047857">
         ✅ <b>시트: ${srcLabel}</b> · 매칭 <b>${cnt}</b>명${dropped?` (명단 외 제외 ${dropped}명)`:''}<br>${names2}</div>`;
       document.getElementById('link-apply').disabled=false;
@@ -1294,17 +1335,24 @@ function parseLink(ev){
 function applyLink(){
   if(!pendingLink) return;
   const r=R();
-  Object.entries(pendingLink.result).forEach(([h,st])=>r.exclusions[h]=st);
+  if(!r.manualSet) r.manualSet={};
+  let cleared=0;
+  // 오늘 파일이 권위. 사람이 직접 지정(manualSet)하지 않은 장기 제외자(퇴사/미입사)는 모두 비운다.
+  // → 과거 버전이 잘못 남긴 승계 데이터(구민준/변유안/이석현 등)도 여기서 깨끗이 정리됨.
+  Object.keys(r.exclusions).forEach(h=>{
+    if(!r.manualSet[h] && isLongTerm(r.exclusions[h])){ delete r.exclusions[h]; cleared++; }
+  });
+  Object.entries(pendingLink.result).forEach(([h,st])=>{ r.exclusions[h]=st; });
   r.logLink={file:pendingLink.file, count:pendingLink.count, when:new Date().toLocaleString('ko-KR')};
   save(); closeOv('ov-link'); render(); renderLinkBar();
-  toast(`당일 일지 연동 완료 (${pendingLink.count}명)`);
+  toast(`당일 일지 연동 완료 (${pendingLink.count}명${cleared?`, 복귀 처리로 ${cleared}명 자동 해제`:''})`);
 }
 function unlinkLog(){
   const r=R();
   if(!r.logLink){ toast('연동된 일지가 없습니다'); return; }
   if(!confirm('당일 일지 연동을 해제할까요?\n(자동 반영된 귀가/미입사 표시도 함께 해제됩니다. 퇴사는 유지)')) return;
-  // 연동으로 들어온 귀가/미입사만 제거(퇴사는 장기로 보고 유지)
-  Object.keys(r.exclusions).forEach(h=>{ if(r.exclusions[h]==='귀가'||r.exclusions[h]==='미입사') delete r.exclusions[h]; });
+  if(!r.manualSet) r.manualSet={};
+  Object.keys(r.exclusions).forEach(h=>{ if(!r.manualSet[h]){ delete r.exclusions[h]; } });
   delete r.logLink; save(); render(); renderLinkBar(); renderLinkStatusBox();
   toast('연동이 해제되었습니다');
 }
